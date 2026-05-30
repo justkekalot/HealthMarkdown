@@ -24,13 +24,28 @@ final class HealthKitManager: ObservableObject {
     @Published var authState: AuthState = .unknown
     @Published var phase: Phase = .idle
     @Published var lastReport: HealthReport?
+    /// Markdown for `lastReport`, generated once off the main thread so the
+    /// preview/share never regenerates a large document on the UI thread.
+    @Published var lastMarkdown: String = ""
 
     private let store = HKHealthStore()
+    private let connectedKey = "hasConnectedHealth"
 
     var isAvailable: Bool { HKHealthStore.isHealthDataAvailable() }
 
     init() {
-        authState = isAvailable ? .unknown : .unavailable
+        guard isAvailable else {
+            authState = .unavailable
+            return
+        }
+        // Once the user has connected once, skip the onboarding gate on every
+        // subsequent launch. HealthKit deliberately never reveals read-permission
+        // status, so we persist our own "connected" flag rather than re-prompting.
+        if UserDefaults.standard.bool(forKey: connectedKey) {
+            authState = .authorized
+        } else {
+            authState = .unknown
+        }
     }
 
     // MARK: - Authorization
@@ -46,6 +61,7 @@ final class HealthKitManager: ObservableObject {
             try await store.requestAuthorization(toShare: [], read: readTypes)
             // HealthKit never reveals read permission per-type for privacy reasons;
             // we treat a completed prompt as "ready to try reading".
+            UserDefaults.standard.set(true, forKey: connectedKey)
             authState = .authorized
         } catch {
             authState = .denied
@@ -99,17 +115,25 @@ final class HealthKitManager: ObservableObject {
         advance("Workouts")
         report.workouts = await fetchWorkouts(predicate: predicate)
 
-        // Full export: day-by-day series for every quantity that has data.
+        // Full export: every raw sample for every quantity that has data.
         if mode == .full {
             for spec in HealthCatalog.quantities {
-                advance("\(spec.title) (daily)")
-                if let series = await fetchDailySeries(spec: spec, interval: interval), series.hasData {
-                    report.dailySeries.append(series)
+                advance("\(spec.title) (raw)")
+                if let series = await fetchRawSeries(spec: spec, predicate: predicate), series.hasData {
+                    report.rawSeries.append(series)
                 }
             }
         }
 
+        // Generate the (potentially very large) Markdown off the main thread.
+        phase = .fetching(progress: 1, label: "Formatting Markdown…")
+        let finalReport = report
+        let markdown = await Task.detached(priority: .userInitiated) {
+            MarkdownGenerator.generate(from: finalReport)
+        }.value
+
         lastReport = report
+        lastMarkdown = markdown
         phase = .done
     }
 
@@ -231,52 +255,36 @@ final class HealthKitManager: ObservableObject {
         }
     }
 
-    // MARK: - Daily series (full export)
+    // MARK: - Raw samples (full export)
 
-    /// One value per day for a metric, via a statistics collection query bucketed daily.
-    private func fetchDailySeries(spec: QuantitySpec, interval: DateInterval) async -> QuantityDailySeries? {
+    /// Every individual sample for a metric — no bucketing, no averaging.
+    /// This is the actual raw HealthKit export the user asked for.
+    private func fetchRawSeries(spec: QuantitySpec, predicate: NSPredicate) async -> QuantityRawSeries? {
         guard let type = spec.quantityType else { return nil }
+        let unit = spec.unit
+        let isPercent = unit == HKUnit.percent()
 
-        let options: HKStatisticsOptions = spec.aggregation == .cumulativeSum ? [.cumulativeSum] : [.discreteAverage]
-        let calendar = Calendar.current
-        let anchor = calendar.startOfDay(for: interval.start)
-        var daily = DateComponents()
-        daily.day = 1
-        let predicate = HKQuery.predicateForSamples(withStart: interval.start, end: interval.end, options: .strictStartDate)
-
-        let collection: HKStatisticsCollection? = await withCheckedContinuation { continuation in
-            let query = HKStatisticsCollectionQuery(
-                quantityType: type,
-                quantitySamplePredicate: predicate,
-                options: options,
-                anchorDate: anchor,
-                intervalComponents: daily
-            )
-            query.initialResultsHandler = { _, result, _ in
-                continuation.resume(returning: result)
+        let samples: [HKQuantitySample] = await withCheckedContinuation { continuation in
+            let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
+            let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: [sort]) { _, samples, _ in
+                continuation.resume(returning: (samples as? [HKQuantitySample]) ?? [])
             }
             store.execute(query)
         }
 
-        guard let collection else { return nil }
+        guard !samples.isEmpty else { return nil }
 
-        let unit = spec.unit
-        let isPercent = unit == HKUnit.percent()
-        var points: [DailyPoint] = []
-
-        collection.enumerateStatistics(from: interval.start, to: interval.end) { stats, _ in
-            let quantity: HKQuantity?
-            switch spec.aggregation {
-            case .cumulativeSum: quantity = stats.sumQuantity()
-            case .discreteAverage: quantity = stats.averageQuantity()
-            }
-            guard let quantity else { return }
-            var value = quantity.doubleValue(for: unit)
+        let raw = samples.map { sample -> RawSample in
+            var value = sample.quantity.doubleValue(for: unit)
             if isPercent { value *= 100 }
-            points.append(DailyPoint(date: stats.startDate, value: value))
+            return RawSample(
+                start: sample.startDate,
+                end: sample.endDate,
+                value: value,
+                source: sample.sourceRevision.source.name
+            )
         }
-
-        return QuantityDailySeries(spec: spec, points: points)
+        return QuantityRawSeries(spec: spec, samples: raw)
     }
 
     // MARK: - Sleep

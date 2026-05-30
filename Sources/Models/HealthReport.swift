@@ -70,18 +70,21 @@ struct ProfileSummary {
     }
 }
 
-/// One day's value for a single metric, used only by the full export.
-struct DailyPoint {
-    let date: Date
+/// A single raw HealthKit sample (full export only): exact timestamp + value,
+/// straight from the store with no bucketing or averaging.
+struct RawSample {
+    let start: Date
+    let end: Date
     let value: Double
+    let source: String?
 }
 
-/// Day-by-day series for one quantity metric (full export only).
-struct QuantityDailySeries: Identifiable {
+/// Every raw sample for one quantity metric (full export only).
+struct QuantityRawSeries: Identifiable {
     let spec: QuantitySpec
-    let points: [DailyPoint]   // chronological, only days with data
+    let samples: [RawSample]   // chronological
     var id: String { spec.id }
-    var hasData: Bool { !points.isEmpty }
+    var hasData: Bool { !samples.isEmpty }
 }
 
 /// The complete report handed to the Markdown generator.
@@ -95,8 +98,10 @@ struct HealthReport {
     var sleep = SleepSummary()
     var mindful = MindfulSummary()
     var workouts = WorkoutsSummary()
-    /// Populated only when mode == .full.
-    var dailySeries: [QuantityDailySeries] = []
+    /// Populated only when mode == .full — raw per-sample data.
+    var rawSeries: [QuantityRawSeries] = []
+    /// Total raw samples across all metrics (full export).
+    var rawSampleCount: Int { rawSeries.reduce(0) { $0 + $1.samples.count } }
 
     var sectionsWithData: [HealthSection] {
         var present = Set<HealthSection>()

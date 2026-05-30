@@ -3,8 +3,9 @@ import UIKit
 
 struct PreviewView: View {
     let report: HealthReport
+    /// Pre-generated Markdown (built off the main thread by HealthKitManager).
+    let markdown: String
     @Environment(\.dismiss) private var dismiss
-    @State private var markdown: String = ""
     @State private var copied = false
     @State private var showShare = false
     @State private var exportURL: URL?
@@ -56,8 +57,8 @@ struct PreviewView: View {
                         .foregroundStyle(Theme.textPrimary)
                 }
             }
-            .onAppear {
-                markdown = MarkdownGenerator.generate(from: report)
+            .task {
+                // File write is the only work here now; markdown is already built.
                 exportURL = writeTempFile(markdown)
             }
             .sheet(isPresented: $showShare) {
@@ -88,8 +89,13 @@ struct PreviewView: View {
                         .multilineTextAlignment(.center)
 
                     HStack(spacing: 18) {
-                        statPill("\(report.totalDataPoints)", "data points")
-                        statPill("\(report.dailySeries.count)", "metrics/day")
+                        if report.mode == .full {
+                            statPill("\(report.rawSampleCount)", "raw samples")
+                            statPill("\(report.rawSeries.count)", "metrics")
+                        } else {
+                            statPill("\(report.totalDataPoints)", "data points")
+                            statPill("\(report.sectionsWithData.count)", "sections")
+                        }
                         statPill(report.range.title, "window")
                     }
                     .padding(.top, 4)

@@ -40,7 +40,7 @@ struct DashboardView: View {
         }
         .sheet(isPresented: $showPreview) {
             if let report = health.lastReport {
-                PreviewView(report: report)
+                PreviewView(report: report, markdown: health.lastMarkdown)
             }
         }
     }
@@ -187,8 +187,7 @@ struct DashboardView: View {
             Task {
                 await health.generateReport(for: selectedRange, mode: selectedMode)
                 if health.phase == .done, let report = health.lastReport {
-                    let md = MarkdownGenerator.generate(from: report)
-                    freshRecord = exports.save(report: report, markdown: md)
+                    freshRecord = exports.save(report: report, markdown: health.lastMarkdown)
                 }
             }
         } label: {
