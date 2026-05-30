@@ -91,7 +91,7 @@ struct PreviewView: View {
                     HStack(spacing: 18) {
                         if report.mode == .full {
                             statPill("\(report.rawSampleCount)", "raw samples")
-                            statPill("\(report.rawSeries.count)", "metrics")
+                            statPill("\(report.rawSeries.count + report.rawCategorySeries.count)", "metrics")
                         } else {
                             statPill("\(report.totalDataPoints)", "data points")
                             statPill("\(report.sectionsWithData.count)", "sections")

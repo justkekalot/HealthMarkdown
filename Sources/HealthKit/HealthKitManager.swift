@@ -79,9 +79,9 @@ final class HealthKitManager: ObservableObject {
         var report = HealthReport(generatedAt: Date(), range: range, mode: mode, interval: interval)
 
         let predicate = HKQuery.predicateForSamples(withStart: interval.start, end: interval.end, options: .strictStartDate)
-        // Full mode runs an extra day-by-day pass over every quantity.
-        let extraDailyWork = mode == .full ? HealthCatalog.quantities.count : 0
-        let totalSteps = HealthCatalog.quantities.count + 4 + extraDailyWork
+        // Full mode runs an extra raw pass over every quantity and category.
+        let extraRawWork = mode == .full ? HealthCatalog.quantities.count + HealthCatalog.categories.count : 0
+        let totalSteps = HealthCatalog.quantities.count + 4 + extraRawWork
         var step = 0
 
         func advance(_ label: String) {
@@ -115,12 +115,21 @@ final class HealthKitManager: ObservableObject {
         advance("Workouts")
         report.workouts = await fetchWorkouts(predicate: predicate)
 
-        // Full export: every raw sample for every quantity that has data.
+        // Full export: every raw sample for every metric that has data —
+        // quantities AND category types (sleep, mindfulness), so weight, heart
+        // rate, HRV and sleep all get a real time series, not just a summary.
         if mode == .full {
+            let allTime = range == .allTime
             for spec in HealthCatalog.quantities {
                 advance("\(spec.title) (raw)")
-                if let series = await fetchRawSeries(spec: spec, predicate: predicate), series.hasData {
+                if let series = await fetchRawSeries(spec: spec, interval: interval, allTime: allTime), series.hasData {
                     report.rawSeries.append(series)
+                }
+            }
+            for spec in HealthCatalog.categories {
+                advance("\(spec.title) (raw)")
+                if let series = await fetchRawCategorySeries(spec: spec, interval: interval, allTime: allTime), series.hasData {
+                    report.rawCategorySeries.append(series)
                 }
             }
         }
@@ -259,10 +268,18 @@ final class HealthKitManager: ObservableObject {
 
     /// Every individual sample for a metric — no bucketing, no averaging.
     /// This is the actual raw HealthKit export the user asked for.
-    private func fetchRawSeries(spec: QuantitySpec, predicate: NSPredicate) async -> QuantityRawSeries? {
+    ///
+    /// Uses an *overlap* predicate (not strictStartDate): discrete metrics like
+    /// weight, heart rate and HRV are sparse, and a strict-start window can miss
+    /// readings near the edges — which is why they previously showed only as a
+    /// summary. For the all-time window we pass no predicate at all so nothing
+    /// is excluded.
+    private func fetchRawSeries(spec: QuantitySpec, interval: DateInterval, allTime: Bool) async -> QuantityRawSeries? {
         guard let type = spec.quantityType else { return nil }
         let unit = spec.unit
         let isPercent = unit == HKUnit.percent()
+        let predicate: NSPredicate? = allTime ? nil :
+            HKQuery.predicateForSamples(withStart: interval.start, end: interval.end, options: [])
 
         let samples: [HKQuantitySample] = await withCheckedContinuation { continuation in
             let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
@@ -285,6 +302,50 @@ final class HealthKitManager: ObservableObject {
             )
         }
         return QuantityRawSeries(spec: spec, samples: raw)
+    }
+
+    /// Raw category samples (sleep stages, mindful sessions) for the full export.
+    private func fetchRawCategorySeries(spec: CategorySpec, interval: DateInterval, allTime: Bool) async -> CategoryRawSeries? {
+        guard let type = spec.categoryType else { return nil }
+        let predicate: NSPredicate? = allTime ? nil :
+            HKQuery.predicateForSamples(withStart: interval.start, end: interval.end, options: [])
+
+        let samples: [HKCategorySample] = await withCheckedContinuation { continuation in
+            let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
+            let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: [sort]) { _, samples, _ in
+                continuation.resume(returning: (samples as? [HKCategorySample]) ?? [])
+            }
+            store.execute(query)
+        }
+
+        guard !samples.isEmpty else { return nil }
+
+        let unitLabel = spec.identifier == .sleepAnalysis ? "stage" : "session"
+        let raw = samples.map { sample in
+            RawCategorySample(
+                start: sample.startDate,
+                end: sample.endDate,
+                label: Self.categoryLabel(for: spec.identifier, value: sample.value),
+                source: sample.sourceRevision.source.name
+            )
+        }
+        return CategoryRawSeries(title: spec.title, section: spec.section, unitLabel: unitLabel, samples: raw)
+    }
+
+    /// Human-readable label for a category sample value.
+    static func categoryLabel(for id: HKCategoryTypeIdentifier, value: Int) -> String {
+        if id == .sleepAnalysis {
+            switch HKCategoryValueSleepAnalysis(rawValue: value) {
+            case .inBed: return "In Bed"
+            case .asleepUnspecified: return "Asleep"
+            case .asleepREM: return "REM"
+            case .asleepCore: return "Core"
+            case .asleepDeep: return "Deep"
+            case .awake: return "Awake"
+            default: return "Asleep"
+            }
+        }
+        return "Session"
     }
 
     // MARK: - Sleep

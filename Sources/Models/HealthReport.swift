@@ -87,6 +87,25 @@ struct QuantityRawSeries: Identifiable {
     var hasData: Bool { !samples.isEmpty }
 }
 
+/// A single raw category sample (sleep stage, mindful session): a labelled
+/// time span rather than a number.
+struct RawCategorySample {
+    let start: Date
+    let end: Date
+    let label: String
+    let source: String?
+}
+
+/// Every raw category sample for one metric (sleep, mindfulness).
+struct CategoryRawSeries: Identifiable {
+    let title: String
+    let section: HealthSection
+    let unitLabel: String          // e.g. "stage", "session"
+    let samples: [RawCategorySample]
+    var id: String { title }
+    var hasData: Bool { !samples.isEmpty }
+}
+
 /// The complete report handed to the Markdown generator.
 struct HealthReport {
     let generatedAt: Date
@@ -100,8 +119,12 @@ struct HealthReport {
     var workouts = WorkoutsSummary()
     /// Populated only when mode == .full — raw per-sample data.
     var rawSeries: [QuantityRawSeries] = []
+    var rawCategorySeries: [CategoryRawSeries] = []
     /// Total raw samples across all metrics (full export).
-    var rawSampleCount: Int { rawSeries.reduce(0) { $0 + $1.samples.count } }
+    var rawSampleCount: Int {
+        rawSeries.reduce(0) { $0 + $1.samples.count }
+            + rawCategorySeries.reduce(0) { $0 + $1.samples.count }
+    }
 
     var sectionsWithData: [HealthSection] {
         var present = Set<HealthSection>()

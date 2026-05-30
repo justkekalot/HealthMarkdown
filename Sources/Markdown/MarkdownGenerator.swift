@@ -30,7 +30,7 @@ enum MarkdownGenerator {
             }
         }
 
-        if report.mode == .full && !report.rawSeries.isEmpty {
+        if report.mode == .full && (!report.rawSeries.isEmpty || !report.rawCategorySeries.isEmpty) {
             md += rawDumpSection(report)
         }
 
@@ -192,26 +192,43 @@ enum MarkdownGenerator {
     // MARK: - Daily breakdown (full export)
 
     private static func rawDumpSection(_ report: HealthReport) -> String {
+        let metricCount = report.rawSeries.count + report.rawCategorySeries.count
         var s = "## Raw Samples\n\n"
         s += "_Every individual measurement as recorded in Apple Health — no bucketing, no averaging. "
-        s += "One table per metric; each row is a single sample with its exact start/end time, value, and source._\n\n"
-        s += "**\(report.rawSampleCount) raw samples across \(report.rawSeries.count) metrics.**\n\n"
+        s += "One table per metric; each row is a single sample with its exact start/end time, value, and source. "
+        s += "This is where the real time series live: weight, heart rate, HRV and sleep all appear here as full curves._\n\n"
+        s += "**\(report.rawSampleCount) raw samples across \(metricCount) metrics.**\n\n"
 
-        // Group metrics by section, following the canonical order.
-        let bySection = Dictionary(grouping: report.rawSeries, by: { $0.spec.section })
+        // Group both quantity and category series by section, canonical order.
+        let quantBySection = Dictionary(grouping: report.rawSeries, by: { $0.spec.section })
+        let catBySection = Dictionary(grouping: report.rawCategorySeries, by: { $0.section })
+
         for section in HealthSection.allCases {
-            guard let series = bySection[section], !series.isEmpty else { continue }
+            let quants = quantBySection[section]?.sorted { $0.spec.title < $1.spec.title } ?? []
+            let cats = catBySection[section]?.sorted { $0.title < $1.title } ?? []
+            guard !quants.isEmpty || !cats.isEmpty else { continue }
             s += "### \(section.title)\n\n"
-            for serie in series.sorted(by: { $0.spec.title < $1.spec.title }) {
+
+            // ISO-8601 timestamps: compact, unambiguous for an agent, and the
+            // formatter is cached so this stays fast even at 100k+ rows.
+            for serie in quants {
                 s += "#### \(serie.spec.title) (\(serie.spec.unitLabel)) — \(serie.samples.count) samples\n\n"
                 s += "| Start | End | Value | Source |\n|---|---|---|---|\n"
-                // ISO-8601 timestamps: compact, unambiguous for an agent, and the
-                // formatter is cached so this stays fast even at 100k+ rows.
                 for sample in serie.samples {
                     let value = Fmt.number(sample.value, precision: serie.spec.precision)
                     let end = sample.end == sample.start ? "—" : Fmt.isoTimestamp(sample.end)
                     let source = sample.source ?? "—"
                     s += "| \(Fmt.isoTimestamp(sample.start)) | \(end) | \(value) | \(source) |\n"
+                }
+                s += "\n"
+            }
+
+            for serie in cats {
+                s += "#### \(serie.title) — \(serie.samples.count) \(serie.unitLabel)s\n\n"
+                s += "| Start | End | \(serie.unitLabel.capitalized) | Source |\n|---|---|---|---|\n"
+                for sample in serie.samples {
+                    let source = sample.source ?? "—"
+                    s += "| \(Fmt.isoTimestamp(sample.start)) | \(Fmt.isoTimestamp(sample.end)) | \(sample.label) | \(source) |\n"
                 }
                 s += "\n"
             }
