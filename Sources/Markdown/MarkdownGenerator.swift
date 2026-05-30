@@ -181,23 +181,39 @@ enum MarkdownGenerator {
     // MARK: - Daily breakdown (full export)
 
     private static func dailyBreakdownSection(_ report: HealthReport) -> String {
-        var s = "## Daily Breakdown\n\n"
-        s += "_Full export: one row per day for every metric with data. "
-        s += "Cumulative metrics show the day's total; point-in-time metrics show the day's average._\n\n"
-
-        // Group series by section for readability, following the canonical order.
-        let bySection = Dictionary(grouping: report.dailySeries, by: { $0.spec.section })
-        for section in HealthSection.allCases {
-            guard let series = bySection[section], !series.isEmpty else { continue }
-            s += "### \(section.title)\n\n"
-            for serie in series {
-                s += "**\(serie.spec.title)** (\(serie.spec.unitLabel))\n\n"
-                s += "| Date | Value |\n|---|---|\n"
-                for point in serie.points {
-                    s += "| \(Fmt.shortDate(point.date)) | \(Fmt.number(point.value, precision: serie.spec.precision)) |\n"
-                }
-                s += "\n"
+        // Pivot the per-metric series into a chronological per-day log: one
+        // subsection per calendar day, listing every metric recorded that day.
+        // All series share the same daily anchor, so bucket dates align as keys.
+        struct DayEntry { let spec: QuantitySpec; let value: Double }
+        var byDay: [Date: [DayEntry]] = [:]
+        for serie in report.dailySeries {
+            for point in serie.points {
+                byDay[point.date, default: []].append(DayEntry(spec: serie.spec, value: point.value))
             }
+        }
+
+        let days = byDay.keys.sorted()
+        var s = "## Daily Log\n\n"
+        s += "_Full export: one section per day, from the start of the window to the end. "
+        s += "Each day lists every metric recorded that day — cumulative metrics show the day's total, "
+        s += "point-in-time metrics show the day's average. Days with no data are omitted._\n\n"
+        s += "**\(days.count) days with data.**\n\n"
+
+        for day in days {
+            guard let entries = byDay[day] else { continue }
+            // Order entries by the canonical section order, then metric order.
+            let ordered = entries.sorted {
+                if $0.spec.section.sortIndex != $1.spec.section.sortIndex {
+                    return $0.spec.section.sortIndex < $1.spec.section.sortIndex
+                }
+                return $0.spec.title < $1.spec.title
+            }
+            s += "### \(Fmt.shortDate(day))\n\n"
+            s += "| Metric | Value |\n|---|---|\n"
+            for entry in ordered {
+                s += "| \(entry.spec.title) | \(Fmt.number(entry.value, precision: entry.spec.precision)) \(entry.spec.unitLabel) |\n"
+            }
+            s += "\n"
         }
         return s
     }

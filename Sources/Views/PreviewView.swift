@@ -9,30 +9,39 @@ struct PreviewView: View {
     @State private var showShare = false
     @State private var exportURL: URL?
 
+    /// Big exports (full mode over a long window) can be hundreds of KB —
+    /// rendering that as one selectable Text is slow and pointless. Above this
+    /// size we show a file card instead of the raw text.
+    private var isLarge: Bool { markdown.utf8.count > 60_000 }
+
     var body: some View {
         NavigationStack {
             ZStack {
                 Theme.bg.ignoresSafeArea()
 
-                ScrollView {
-                    Text(markdown)
-                        .font(.system(.footnote, design: .monospaced))
-                        .foregroundStyle(Theme.textPrimary)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                .fill(Color.white.opacity(0.05))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                .stroke(Theme.cardStroke, lineWidth: 1)
-                        )
-                        .padding(16)
-                        .padding(.bottom, 120)
+                if isLarge {
+                    largeFileCard
+                } else {
+                    ScrollView {
+                        Text(markdown)
+                            .font(.system(.footnote, design: .monospaced))
+                            .foregroundStyle(Theme.textPrimary)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(16)
+                            .background(
+                                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                    .fill(Color.white.opacity(0.05))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                    .stroke(Theme.cardStroke, lineWidth: 1)
+                            )
+                            .padding(16)
+                            .padding(.bottom, 120)
+                    }
+                    .scrollIndicators(.hidden)
                 }
-                .scrollIndicators(.hidden)
 
                 VStack {
                     Spacer()
@@ -57,6 +66,54 @@ struct PreviewView: View {
                 }
             }
         }
+    }
+
+    private var largeFileCard: some View {
+        VStack {
+            Spacer()
+            GlassCard {
+                VStack(spacing: 16) {
+                    ZStack {
+                        Circle().fill(Theme.heroGradient).frame(width: 72, height: 72)
+                        Image(systemName: "doc.text.fill")
+                            .font(.system(size: 32, weight: .semibold))
+                            .foregroundStyle(.white)
+                    }
+                    Text("Full export ready")
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(Theme.textPrimary)
+                    Text("This export is large (\(byteSize)). Preview is skipped so it stays fast — share the file or copy it straight to your assistant.")
+                        .font(.subheadline)
+                        .foregroundStyle(Theme.textSecondary)
+                        .multilineTextAlignment(.center)
+
+                    HStack(spacing: 18) {
+                        statPill("\(report.totalDataPoints)", "data points")
+                        statPill("\(report.dailySeries.count)", "metrics/day")
+                        statPill(report.range.title, "window")
+                    }
+                    .padding(.top, 4)
+                }
+            }
+            .padding(.horizontal, 20)
+            Spacer()
+            Spacer()
+        }
+    }
+
+    private func statPill(_ value: String, _ label: String) -> some View {
+        VStack(spacing: 2) {
+            Text(value)
+                .font(.headline.weight(.bold))
+                .foregroundStyle(Theme.textPrimary)
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(Theme.textSecondary)
+        }
+    }
+
+    private var byteSize: String {
+        ByteCountFormatter.string(fromByteCount: Int64(markdown.utf8.count), countStyle: .file)
     }
 
     private var actionBar: some View {
