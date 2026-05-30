@@ -90,7 +90,7 @@ struct SavedExportView: View {
                 Text("Large export")
                     .font(.title3.weight(.bold))
                     .foregroundStyle(Theme.textPrimary)
-                Text("This file is \(byteSize). Preview is skipped to keep it fast — copy it or share the file straight to your assistant.")
+                Text("This file is \(byteSize). Preview is skipped to keep it fast — share the file straight to your assistant.")
                     .font(.subheadline)
                     .foregroundStyle(Theme.textSecondary)
                     .multilineTextAlignment(.center)
@@ -105,35 +105,37 @@ struct SavedExportView: View {
 
     private var actionBar: some View {
         HStack(spacing: 12) {
-            Button {
-                UIPasteboard.general.string = markdown
-                withAnimation { copied = true }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
-                    withAnimation { copied = false }
+            if !isLarge {
+                Button {
+                    UIPasteboard.general.string = markdown
+                    withAnimation { copied = true }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+                        withAnimation { copied = false }
+                    }
+                } label: {
+                    HStack {
+                        Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                        Text(copied ? "Copied" : "Copy")
+                    }
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(Theme.textPrimary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .fill(Theme.controlStrong)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .stroke(Theme.cardStroke, lineWidth: 1)
+                    )
                 }
-            } label: {
-                HStack {
-                    Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                    Text(copied ? "Copied" : "Copy")
-                }
-                .font(.headline.weight(.semibold))
-                .foregroundStyle(Theme.textPrimary)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
-                .background(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .fill(Theme.controlStrong)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(Theme.cardStroke, lineWidth: 1)
-                )
             }
 
             Button { showShare = true } label: {
                 HStack {
                     Image(systemName: "square.and.arrow.up")
-                    Text("Share")
+                    Text(isLarge ? "Share file" : "Share")
                 }
             }
             .buttonStyle(PrimaryButtonStyle())

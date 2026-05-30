@@ -7,8 +7,9 @@ struct PreviewView: View {
     let markdown: String
     @Environment(\.dismiss) private var dismiss
     @State private var copied = false
-    @State private var showShare = false
-    @State private var exportURL: URL?
+    /// Bound to .sheet(item:) so the share sheet can only present once the file
+    /// actually exists — fixes the empty grey sheet right after generation.
+    @State private var shareItem: ShareItem?
 
     /// Big exports (full mode over a long window) can be hundreds of KB —
     /// rendering that as one selectable Text is slow and pointless. Above this
@@ -57,15 +58,16 @@ struct PreviewView: View {
                         .foregroundStyle(Theme.textPrimary)
                 }
             }
-            .task {
-                // File write is the only work here now; markdown is already built.
-                exportURL = writeTempFile(markdown)
+            .sheet(item: $shareItem) { item in
+                ShareSheet(items: [item.url])
             }
-            .sheet(isPresented: $showShare) {
-                if let exportURL {
-                    ShareSheet(items: [exportURL])
-                }
-            }
+        }
+    }
+
+    /// Write the file on demand and present the share sheet only when it exists.
+    private func share() {
+        if let url = writeTempFile(markdown) {
+            shareItem = ShareItem(url: url)
         }
     }
 
@@ -83,7 +85,7 @@ struct PreviewView: View {
                     Text("Full export ready")
                         .font(.title3.weight(.bold))
                         .foregroundStyle(Theme.textPrimary)
-                    Text("This export is large (\(byteSize)). Preview is skipped so it stays fast — share the file or copy it straight to your assistant.")
+                    Text("This export is large (\(byteSize)). Preview is skipped so it stays fast — share the file straight to your assistant.")
                         .font(.subheadline)
                         .foregroundStyle(Theme.textSecondary)
                         .multilineTextAlignment(.center)
@@ -124,37 +126,41 @@ struct PreviewView: View {
 
     private var actionBar: some View {
         HStack(spacing: 12) {
-            Button {
-                UIPasteboard.general.string = markdown
-                withAnimation { copied = true }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
-                    withAnimation { copied = false }
+            // Copy only makes sense for small exports — a multi-MB string on the
+            // pasteboard is useless, so for large exports we offer Share only.
+            if !isLarge {
+                Button {
+                    UIPasteboard.general.string = markdown
+                    withAnimation { copied = true }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+                        withAnimation { copied = false }
+                    }
+                } label: {
+                    HStack {
+                        Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                        Text(copied ? "Copied" : "Copy")
+                    }
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(Theme.textPrimary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .fill(Theme.controlStrong)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .stroke(Theme.cardStroke, lineWidth: 1)
+                    )
                 }
-            } label: {
-                HStack {
-                    Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                    Text(copied ? "Copied" : "Copy")
-                }
-                .font(.headline.weight(.semibold))
-                .foregroundStyle(Theme.textPrimary)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
-                .background(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .fill(Theme.controlStrong)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(Theme.cardStroke, lineWidth: 1)
-                )
             }
 
             Button {
-                showShare = true
+                share()
             } label: {
                 HStack {
                     Image(systemName: "square.and.arrow.up")
-                    Text("Share")
+                    Text(isLarge ? "Share file" : "Share")
                 }
             }
             .buttonStyle(PrimaryButtonStyle())
@@ -180,6 +186,12 @@ struct PreviewView: View {
             return nil
         }
     }
+}
+
+/// Identifiable wrapper so a file URL can drive `.sheet(item:)`.
+struct ShareItem: Identifiable {
+    let url: URL
+    var id: String { url.path }
 }
 
 /// UIKit share sheet bridge.
