@@ -7,33 +7,43 @@ struct SavedExportView: View {
     @EnvironmentObject var exports: ExportStore
     @Environment(\.dismiss) private var dismiss
     @State private var markdown = ""
+    @State private var loading = true
     @State private var copied = false
     @State private var showShare = false
+
+    /// Mirror PreviewView: above this size, skip rendering the raw text.
+    private var isLarge: Bool { markdown.utf8.count > 60_000 }
 
     var body: some View {
         NavigationStack {
             ZStack {
                 Theme.bg.ignoresSafeArea()
 
-                ScrollView {
-                    Text(markdown)
-                        .font(.system(.footnote, design: .monospaced))
-                        .foregroundStyle(Theme.textPrimary)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(16)
-                        .background(
-                            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                .fill(Color.white.opacity(0.05))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                .stroke(Theme.cardStroke, lineWidth: 1)
-                        )
-                        .padding(16)
-                        .padding(.bottom, 120)
+                if loading {
+                    ProgressView().tint(Theme.accent)
+                } else if isLarge {
+                    largeFileCard
+                } else {
+                    ScrollView {
+                        Text(markdown)
+                            .font(.system(.footnote, design: .monospaced))
+                            .foregroundStyle(Theme.textPrimary)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(16)
+                            .background(
+                                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                    .fill(Color.white.opacity(0.05))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                    .stroke(Theme.cardStroke, lineWidth: 1)
+                            )
+                            .padding(16)
+                            .padding(.bottom, 120)
+                    }
+                    .scrollIndicators(.hidden)
                 }
-                .scrollIndicators(.hidden)
 
                 VStack { Spacer(); actionBar }
             }
@@ -53,11 +63,44 @@ struct SavedExportView: View {
                     .tint(Theme.accent)
                 }
             }
-            .onAppear { markdown = exports.markdown(for: record) }
+            .task {
+                // Read the (possibly large) file off the main thread.
+                let url = exports.fileURL(for: record)
+                let text = await Task.detached(priority: .userInitiated) {
+                    (try? String(contentsOf: url, encoding: .utf8)) ?? "_Export file is missing._"
+                }.value
+                markdown = text
+                loading = false
+            }
             .sheet(isPresented: $showShare) {
                 ShareSheet(items: [exports.fileURL(for: record)])
             }
         }
+    }
+
+    private var largeFileCard: some View {
+        GlassCard {
+            VStack(spacing: 16) {
+                ZStack {
+                    Circle().fill(Theme.heroGradient).frame(width: 72, height: 72)
+                    Image(systemName: "doc.text.fill")
+                        .font(.system(size: 32, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+                Text("Large export")
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(Theme.textPrimary)
+                Text("This file is \(byteSize). Preview is skipped to keep it fast — copy it or share the file straight to your assistant.")
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.textSecondary)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .padding(.horizontal, 20)
+    }
+
+    private var byteSize: String {
+        ByteCountFormatter.string(fromByteCount: Int64(markdown.utf8.count), countStyle: .file)
     }
 
     private var actionBar: some View {
