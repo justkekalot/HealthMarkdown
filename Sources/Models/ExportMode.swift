@@ -21,6 +21,14 @@ enum ExportMode: String, CaseIterable, Identifiable, Codable {
         }
     }
 
+    /// Two-word descriptor for the compact selector card.
+    var shortTag: String {
+        switch self {
+        case .quick: return "Summary"
+        case .full: return "Every day"
+        }
+    }
+
     var symbol: String {
         switch self {
         case .quick: return "bolt.fill"

@@ -6,26 +6,27 @@ struct DashboardView: View {
     @State private var selectedRange: DateRangeOption = .last30Days
     @State private var selectedMode: ExportMode = .quick
     @State private var showPreview = false
+    /// The record produced by the most recent Generate with the *current*
+    /// inputs. Cleared whenever mode/range change so a stale result never lingers.
+    @State private var freshRecord: ExportRecord?
+
+    private var isFetching: Bool {
+        if case .fetching = health.phase { return true }
+        return false
+    }
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
-                    intro
+                VStack(alignment: .leading, spacing: 26) {
+                    stepHeader(1, "What to export")
+                    modeSelector
 
-                    modePicker
+                    stepHeader(2, "Over which period")
+                    rangeChips
 
-                    rangePicker
-
-                    if case let .fetching(progress, label) = health.phase {
-                        progressCard(progress: progress, label: label)
-                    } else {
-                        generateButton
-                    }
-
-                    if let report = health.lastReport, health.phase == .done || health.phase == .idle {
-                        resultCard(report)
-                    }
+                    stepHeader(3, "Generate")
+                    actionArea
 
                     privacyNote
                 }
@@ -34,7 +35,7 @@ struct DashboardView: View {
             }
             .scrollIndicators(.hidden)
             .background(Color.clear)
-            .navigationTitle("Export")
+            .navigationTitle("New Export")
             .toolbarBackground(.hidden, for: .navigationBar)
         }
         .sheet(isPresented: $showPreview) {
@@ -44,132 +45,141 @@ struct DashboardView: View {
         }
     }
 
-    // MARK: - Pieces
+    // MARK: - Step header
 
-    private var intro: some View {
-        Text("Choose what to export and over which window.")
-            .font(.subheadline)
-            .foregroundStyle(Theme.textSecondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var modePicker: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("EXPORT TYPE")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(Theme.textSecondary)
-                .tracking(1.2)
-
-            VStack(spacing: 10) {
-                ForEach(ExportMode.allCases) { mode in
-                    modeRow(mode)
-                }
-            }
+    private func stepHeader(_ n: Int, _ title: String) -> some View {
+        HStack(spacing: 10) {
+            Text("\(n)")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.white)
+                .frame(width: 22, height: 22)
+                .background(Circle().fill(Theme.accent.opacity(0.85)))
+            Text(title)
+                .font(.headline)
+                .foregroundStyle(Theme.textPrimary)
+            Spacer()
         }
     }
 
-    private func modeRow(_ mode: ExportMode) -> some View {
+    // MARK: - Step 1: mode (two side-by-side cards)
+
+    private var modeSelector: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 12) {
+                ForEach(ExportMode.allCases) { mode in
+                    modeCard(mode)
+                }
+            }
+            // Explanation for the currently-selected mode, below the cards.
+            HStack(spacing: 8) {
+                Image(systemName: "info.circle")
+                    .font(.caption)
+                    .foregroundStyle(Theme.textSecondary)
+                Text(selectedMode.subtitle)
+                    .font(.footnote)
+                    .foregroundStyle(Theme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+            }
+            .padding(.horizontal, 4)
+            .transition(.opacity)
+            .id(selectedMode)
+        }
+    }
+
+    private func modeCard(_ mode: ExportMode) -> some View {
         let selected = selectedMode == mode
         return Button {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                 selectedMode = mode
+                invalidateResult()
             }
         } label: {
-            HStack(spacing: 14) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(selected ? AnyShapeStyle(Theme.heroGradient) : AnyShapeStyle(Color.white.opacity(0.07)))
-                        .frame(width: 42, height: 42)
-                    Image(systemName: mode.symbol)
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(.white)
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(mode.title)
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(Theme.textPrimary)
-                    Text(mode.subtitle)
-                        .font(.footnote)
-                        .foregroundStyle(Theme.textSecondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer()
-                if selected {
-                    Image(systemName: "checkmark.circle.fill")
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 11, style: .continuous)
+                            .fill(selected ? AnyShapeStyle(Theme.heroGradient) : AnyShapeStyle(Color.white.opacity(0.08)))
+                            .frame(width: 38, height: 38)
+                        Image(systemName: mode.symbol)
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(.white)
+                    }
+                    Spacer()
+                    Image(systemName: selected ? "checkmark.circle.fill" : "circle")
                         .font(.system(size: 20))
-                        .foregroundStyle(Theme.accent)
+                        .foregroundStyle(selected ? Theme.accent : Theme.textSecondary.opacity(0.5))
                 }
+                Text(mode.title)
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(Theme.textPrimary)
+                Text(mode.shortTag)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(Theme.textSecondary)
             }
-            .padding(.vertical, 14)
-            .padding(.horizontal, 16)
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .fill(selected ? Theme.subtleGradient : LinearGradient(colors: [Theme.card], startPoint: .top, endPoint: .bottom))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(selected ? Theme.accent.opacity(0.5) : Theme.cardStroke, lineWidth: 1)
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(selected ? Theme.accent.opacity(0.6) : Theme.cardStroke, lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
     }
 
-    private var rangePicker: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("TIME WINDOW")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(Theme.textSecondary)
-                .tracking(1.2)
+    // MARK: - Step 2: range (single horizontal chip row)
 
-            VStack(spacing: 10) {
+    private var rangeChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
                 ForEach(DateRangeOption.allCases) { option in
-                    rangeRow(option)
+                    rangeChip(option)
                 }
             }
+            .padding(.horizontal, 2)
+            .padding(.vertical, 2)
         }
+        .scrollClipDisabled()
     }
 
-    private func rangeRow(_ option: DateRangeOption) -> some View {
+    private func rangeChip(_ option: DateRangeOption) -> some View {
         let selected = selectedRange == option
         return Button {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                 selectedRange = option
+                invalidateResult()
             }
         } label: {
-            HStack(spacing: 14) {
-                ZStack {
-                    Circle()
-                        .stroke(selected ? Color.clear : Theme.cardStroke, lineWidth: 1.5)
-                        .background(Circle().fill(selected ? AnyShapeStyle(Theme.heroGradient) : AnyShapeStyle(Color.clear)))
-                        .frame(width: 24, height: 24)
-                    if selected {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(.white)
-                    }
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(option.title)
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(Theme.textPrimary)
-                    Text(option.subtitle)
-                        .font(.footnote)
-                        .foregroundStyle(Theme.textSecondary)
-                }
-                Spacer()
-            }
-            .padding(.vertical, 14)
-            .padding(.horizontal, 16)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(selected ? Theme.subtleGradient : LinearGradient(colors: [Theme.card], startPoint: .top, endPoint: .bottom))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(selected ? Theme.accent.opacity(0.5) : Theme.cardStroke, lineWidth: 1)
-            )
+            Text(option.title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(selected ? .white : Theme.textPrimary)
+                .padding(.vertical, 10)
+                .padding(.horizontal, 16)
+                .background(
+                    Capsule().fill(selected ? AnyShapeStyle(Theme.heroGradient) : AnyShapeStyle(Color.white.opacity(0.06)))
+                )
+                .overlay(
+                    Capsule().stroke(selected ? Color.clear : Theme.cardStroke, lineWidth: 1)
+                )
         }
         .buttonStyle(.plain)
+    }
+
+    // MARK: - Step 3: action / progress / result
+
+    @ViewBuilder
+    private var actionArea: some View {
+        if isFetching, case let .fetching(progress, label) = health.phase {
+            progressCard(progress: progress, label: label)
+        } else if let record = freshRecord, let report = health.lastReport {
+            resultCard(record: record, report: report)
+        } else {
+            generateButton
+        }
     }
 
     private var generateButton: some View {
@@ -178,14 +188,13 @@ struct DashboardView: View {
                 await health.generateReport(for: selectedRange, mode: selectedMode)
                 if health.phase == .done, let report = health.lastReport {
                     let md = MarkdownGenerator.generate(from: report)
-                    exports.save(report: report, markdown: md)
-                    showPreview = true
+                    freshRecord = exports.save(report: report, markdown: md)
                 }
             }
         } label: {
             HStack {
                 Image(systemName: "sparkles")
-                Text("Generate \(selectedMode.title) Markdown")
+                Text("Generate \(selectedMode.title) export")
             }
         }
         .buttonStyle(PrimaryButtonStyle())
@@ -218,7 +227,7 @@ struct DashboardView: View {
         }
     }
 
-    private func resultCard(_ report: HealthReport) -> some View {
+    private func resultCard(record: ExportRecord, report: HealthReport) -> some View {
         GlassCard {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(spacing: 12) {
@@ -229,19 +238,19 @@ struct DashboardView: View {
                             .foregroundStyle(Theme.mint)
                     }
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Ready")
+                        Text("\(report.mode.title) export ready")
                             .font(.headline)
                             .foregroundStyle(Theme.textPrimary)
-                        Text("\(report.totalDataPoints) data points • \(report.sectionsWithData.count) sections")
+                        Text("\(report.totalDataPoints) data points • \(report.sectionsWithData.count) sections • saved to History")
                             .font(.footnote)
                             .foregroundStyle(Theme.textSecondary)
                     }
                     Spacer()
                 }
 
-                // Section chips
                 FlowChips(sections: report.sectionsWithData)
 
+                // Share is the primary action; preview is secondary.
                 Button {
                     showPreview = true
                 } label: {
@@ -251,8 +260,18 @@ struct DashboardView: View {
                     }
                 }
                 .buttonStyle(PrimaryButtonStyle())
+
+                Button {
+                    withAnimation { invalidateResult() }
+                } label: {
+                    Text("Start another export")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(Theme.textSecondary)
+                        .frame(maxWidth: .infinity)
+                }
             }
         }
+        .transition(.opacity.combined(with: .scale(scale: 0.98)))
     }
 
     private var privacyNote: some View {
@@ -265,6 +284,13 @@ struct DashboardView: View {
         .foregroundStyle(Theme.textSecondary)
         .frame(maxWidth: .infinity)
         .padding(.top, 4)
+    }
+
+    /// Drop the stale result so the screen returns to the Generate button when
+    /// inputs change (or the user wants a new export).
+    private func invalidateResult() {
+        freshRecord = nil
+        if health.phase == .done { health.phase = .idle }
     }
 }
 
