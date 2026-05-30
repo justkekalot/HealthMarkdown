@@ -24,32 +24,36 @@ struct HistoryView: View {
     }
 
     private var list: some View {
-        ScrollView {
-            LazyVStack(spacing: 12) {
-                ForEach(exports.records) { record in
-                    Button { selected = record } label: {
-                        ExportRow(record: record)
+        // A plain List (not LazyVStack) so .swipeActions actually works — it's a
+        // no-op outside List. Backgrounds are cleared so the ambient gradient
+        // and the glass cards show through unchanged.
+        List {
+            ForEach(exports.records) { record in
+                Button { selected = record } label: {
+                    ExportRow(record: record)
+                }
+                .buttonStyle(.plain)
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 6, trailing: 20))
+                .contextMenu {
+                    Button(role: .destructive) {
+                        withAnimation { exports.delete(record) }
+                    } label: {
+                        Label("Delete", systemImage: "trash")
                     }
-                    .buttonStyle(.plain)
-                    .contextMenu {
-                        Button(role: .destructive) {
-                            withAnimation { exports.delete(record) }
-                        } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
-                    }
-                    .swipeActions {
-                        Button(role: .destructive) {
-                            withAnimation { exports.delete(record) }
-                        } label: {
-                            Label("Delete", systemImage: "trash")
-                        }
+                }
+                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                    Button(role: .destructive) {
+                        withAnimation { exports.delete(record) }
+                    } label: {
+                        Label("Delete", systemImage: "trash")
                     }
                 }
             }
-            .padding(20)
-            .padding(.bottom, 40)
         }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
         .scrollIndicators(.hidden)
     }
 
