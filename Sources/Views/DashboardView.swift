@@ -2,32 +2,41 @@ import SwiftUI
 
 struct DashboardView: View {
     @EnvironmentObject var health: HealthKitManager
+    @EnvironmentObject var exports: ExportStore
     @State private var selectedRange: DateRangeOption = .last30Days
+    @State private var selectedMode: ExportMode = .quick
     @State private var showPreview = false
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                headerBlock
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    intro
 
-                rangePicker
+                    modePicker
 
-                if case let .fetching(progress, label) = health.phase {
-                    progressCard(progress: progress, label: label)
-                } else {
-                    generateButton
+                    rangePicker
+
+                    if case let .fetching(progress, label) = health.phase {
+                        progressCard(progress: progress, label: label)
+                    } else {
+                        generateButton
+                    }
+
+                    if let report = health.lastReport, health.phase == .done || health.phase == .idle {
+                        resultCard(report)
+                    }
+
+                    privacyNote
                 }
-
-                if let report = health.lastReport, health.phase == .done || health.phase == .idle {
-                    resultCard(report)
-                }
-
-                privacyNote
+                .padding(20)
+                .padding(.bottom, 40)
             }
-            .padding(20)
-            .padding(.bottom, 40)
+            .scrollIndicators(.hidden)
+            .background(Color.clear)
+            .navigationTitle("Export")
+            .toolbarBackground(.hidden, for: .navigationBar)
         }
-        .scrollIndicators(.hidden)
         .sheet(isPresented: $showPreview) {
             if let report = health.lastReport {
                 PreviewView(report: report)
@@ -37,17 +46,72 @@ struct DashboardView: View {
 
     // MARK: - Pieces
 
-    private var headerBlock: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Export")
-                .font(.system(size: 32, weight: .bold, design: .rounded))
-                .foregroundStyle(Theme.textPrimary)
-            Text("Choose a window and generate your Markdown.")
-                .font(.subheadline)
+    private var intro: some View {
+        Text("Choose what to export and over which window.")
+            .font(.subheadline)
+            .foregroundStyle(Theme.textSecondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var modePicker: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("EXPORT TYPE")
+                .font(.caption.weight(.semibold))
                 .foregroundStyle(Theme.textSecondary)
+                .tracking(1.2)
+
+            VStack(spacing: 10) {
+                ForEach(ExportMode.allCases) { mode in
+                    modeRow(mode)
+                }
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.top, 12)
+    }
+
+    private func modeRow(_ mode: ExportMode) -> some View {
+        let selected = selectedMode == mode
+        return Button {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                selectedMode = mode
+            }
+        } label: {
+            HStack(spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(selected ? AnyShapeStyle(Theme.heroGradient) : AnyShapeStyle(Color.white.opacity(0.07)))
+                        .frame(width: 42, height: 42)
+                    Image(systemName: mode.symbol)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(mode.title)
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(Theme.textPrimary)
+                    Text(mode.subtitle)
+                        .font(.footnote)
+                        .foregroundStyle(Theme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+                if selected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 20))
+                        .foregroundStyle(Theme.accent)
+                }
+            }
+            .padding(.vertical, 14)
+            .padding(.horizontal, 16)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(selected ? Theme.subtleGradient : LinearGradient(colors: [Theme.card], startPoint: .top, endPoint: .bottom))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(selected ? Theme.accent.opacity(0.5) : Theme.cardStroke, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     private var rangePicker: some View {
@@ -111,13 +175,17 @@ struct DashboardView: View {
     private var generateButton: some View {
         Button {
             Task {
-                await health.generateReport(for: selectedRange)
-                if health.phase == .done { showPreview = true }
+                await health.generateReport(for: selectedRange, mode: selectedMode)
+                if health.phase == .done, let report = health.lastReport {
+                    let md = MarkdownGenerator.generate(from: report)
+                    exports.save(report: report, markdown: md)
+                    showPreview = true
+                }
             }
         } label: {
             HStack {
                 Image(systemName: "sparkles")
-                Text("Generate Markdown")
+                Text("Generate \(selectedMode.title) Markdown")
             }
         }
         .buttonStyle(PrimaryButtonStyle())

@@ -70,16 +70,33 @@ struct ProfileSummary {
     }
 }
 
+/// One day's value for a single metric, used only by the full export.
+struct DailyPoint {
+    let date: Date
+    let value: Double
+}
+
+/// Day-by-day series for one quantity metric (full export only).
+struct QuantityDailySeries: Identifiable {
+    let spec: QuantitySpec
+    let points: [DailyPoint]   // chronological, only days with data
+    var id: String { spec.id }
+    var hasData: Bool { !points.isEmpty }
+}
+
 /// The complete report handed to the Markdown generator.
 struct HealthReport {
     let generatedAt: Date
     let range: DateRangeOption
+    let mode: ExportMode
     let interval: DateInterval
     var profile = ProfileSummary()
     var quantities: [QuantitySummary] = []
     var sleep = SleepSummary()
     var mindful = MindfulSummary()
     var workouts = WorkoutsSummary()
+    /// Populated only when mode == .full.
+    var dailySeries: [QuantityDailySeries] = []
 
     var sectionsWithData: [HealthSection] {
         var present = Set<HealthSection>()

@@ -20,3 +20,4 @@ HealthMarkdown.xcodeproj/
 *.mode1v3
 *.mode2v3
 *.perspectivev3
+build-device/

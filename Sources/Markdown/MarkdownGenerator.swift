@@ -30,6 +30,10 @@ enum MarkdownGenerator {
             }
         }
 
+        if report.mode == .full && !report.dailySeries.isEmpty {
+            md += dailyBreakdownSection(report)
+        }
+
         md += footer()
         return md
     }
@@ -42,6 +46,7 @@ enum MarkdownGenerator {
         s += "| | |\n|---|---|\n"
         s += "| **Generated** | \(Fmt.dateTime(report.generatedAt)) |\n"
         s += "| **Window** | \(report.range.title) (\(Fmt.shortDate(report.interval.start)) → \(Fmt.shortDate(report.interval.end))) |\n"
+        s += "| **Export** | \(report.mode.title) — \(report.mode == .full ? "aggregates + day-by-day" : "aggregated summary") |\n"
         s += "| **Data points** | \(report.totalDataPoints) |\n"
         s += "| **Sections** | \(report.sectionsWithData.map(\.title).joined(separator: ", ")) |\n\n"
         return s
@@ -170,6 +175,30 @@ enum MarkdownGenerator {
             s += "\n_+\(w.workouts.count - recent.count) more workouts not listed._\n"
         }
         s += "\n"
+        return s
+    }
+
+    // MARK: - Daily breakdown (full export)
+
+    private static func dailyBreakdownSection(_ report: HealthReport) -> String {
+        var s = "## Daily Breakdown\n\n"
+        s += "_Full export: one row per day for every metric with data. "
+        s += "Cumulative metrics show the day's total; point-in-time metrics show the day's average._\n\n"
+
+        // Group series by section for readability, following the canonical order.
+        let bySection = Dictionary(grouping: report.dailySeries, by: { $0.spec.section })
+        for section in HealthSection.allCases {
+            guard let series = bySection[section], !series.isEmpty else { continue }
+            s += "### \(section.title)\n\n"
+            for serie in series {
+                s += "**\(serie.spec.title)** (\(serie.spec.unitLabel))\n\n"
+                s += "| Date | Value |\n|---|---|\n"
+                for point in serie.points {
+                    s += "| \(Fmt.shortDate(point.date)) | \(Fmt.number(point.value, precision: serie.spec.precision)) |\n"
+                }
+                s += "\n"
+            }
+        }
         return s
     }
 

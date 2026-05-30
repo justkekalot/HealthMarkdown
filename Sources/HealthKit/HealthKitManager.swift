@@ -54,16 +54,18 @@ final class HealthKitManager: ObservableObject {
 
     // MARK: - Report generation
 
-    func generateReport(for range: DateRangeOption) async {
+    func generateReport(for range: DateRangeOption, mode: ExportMode) async {
         guard isAvailable else {
             phase = .failed("Health data isn't available on this device.")
             return
         }
         let interval = range.interval()
-        var report = HealthReport(generatedAt: Date(), range: range, interval: interval)
+        var report = HealthReport(generatedAt: Date(), range: range, mode: mode, interval: interval)
 
         let predicate = HKQuery.predicateForSamples(withStart: interval.start, end: interval.end, options: .strictStartDate)
-        let totalSteps = HealthCatalog.quantities.count + 4 // categories(2) + workouts + profile
+        // Full mode runs an extra day-by-day pass over every quantity.
+        let extraDailyWork = mode == .full ? HealthCatalog.quantities.count : 0
+        let totalSteps = HealthCatalog.quantities.count + 4 + extraDailyWork
         var step = 0
 
         func advance(_ label: String) {
@@ -96,6 +98,16 @@ final class HealthKitManager: ObservableObject {
         // Workouts
         advance("Workouts")
         report.workouts = await fetchWorkouts(predicate: predicate)
+
+        // Full export: day-by-day series for every quantity that has data.
+        if mode == .full {
+            for spec in HealthCatalog.quantities {
+                advance("\(spec.title) (daily)")
+                if let series = await fetchDailySeries(spec: spec, interval: interval), series.hasData {
+                    report.dailySeries.append(series)
+                }
+            }
+        }
 
         lastReport = report
         phase = .done
@@ -217,6 +229,54 @@ final class HealthKitManager: ObservableObject {
             }
             store.execute(query)
         }
+    }
+
+    // MARK: - Daily series (full export)
+
+    /// One value per day for a metric, via a statistics collection query bucketed daily.
+    private func fetchDailySeries(spec: QuantitySpec, interval: DateInterval) async -> QuantityDailySeries? {
+        guard let type = spec.quantityType else { return nil }
+
+        let options: HKStatisticsOptions = spec.aggregation == .cumulativeSum ? [.cumulativeSum] : [.discreteAverage]
+        let calendar = Calendar.current
+        let anchor = calendar.startOfDay(for: interval.start)
+        var daily = DateComponents()
+        daily.day = 1
+        let predicate = HKQuery.predicateForSamples(withStart: interval.start, end: interval.end, options: .strictStartDate)
+
+        let collection: HKStatisticsCollection? = await withCheckedContinuation { continuation in
+            let query = HKStatisticsCollectionQuery(
+                quantityType: type,
+                quantitySamplePredicate: predicate,
+                options: options,
+                anchorDate: anchor,
+                intervalComponents: daily
+            )
+            query.initialResultsHandler = { _, result, _ in
+                continuation.resume(returning: result)
+            }
+            store.execute(query)
+        }
+
+        guard let collection else { return nil }
+
+        let unit = spec.unit
+        let isPercent = unit == HKUnit.percent()
+        var points: [DailyPoint] = []
+
+        collection.enumerateStatistics(from: interval.start, to: interval.end) { stats, _ in
+            let quantity: HKQuantity?
+            switch spec.aggregation {
+            case .cumulativeSum: quantity = stats.sumQuantity()
+            case .discreteAverage: quantity = stats.averageQuantity()
+            }
+            guard let quantity else { return }
+            var value = quantity.doubleValue(for: unit)
+            if isPercent { value *= 100 }
+            points.append(DailyPoint(date: stats.startDate, value: value))
+        }
+
+        return QuantityDailySeries(spec: spec, points: points)
     }
 
     // MARK: - Sleep
