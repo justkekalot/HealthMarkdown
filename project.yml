@@ -11,7 +11,7 @@ settings:
     MARKETING_VERSION: "1.0.0"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.0"
-    DEVELOPMENT_TEAM: ""
+    DEVELOPMENT_TEAM: MF369BT56X
     CODE_SIGN_STYLE: Automatic
     GENERATE_INFOPLIST_FILE: NO
     ENABLE_USER_SCRIPT_SANDBOXING: YES
@@ -32,6 +32,7 @@ targets:
           UIColorName: ""
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+        UIRequiresFullScreen: true
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
         NSHealthShareUsageDescription: "HealthMarkdown reads your Health data on-device to compile a single Markdown summary you can hand to an AI assistant. Nothing leaves your phone unless you share it."
