@@ -60,10 +60,10 @@ struct HistoryView: View {
     private var emptyState: some View {
         VStack(spacing: 16) {
             ZStack {
-                Circle().fill(Theme.subtleGradient).frame(width: 88, height: 88)
+                Circle().fill(Theme.iconChip).frame(width: 88, height: 88)
                 Image(systemName: "clock.arrow.circlepath")
                     .font(.system(size: 38, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Theme.accent)
             }
             Text("No exports yet")
                 .font(.title3.weight(.semibold))

@@ -32,7 +32,7 @@ struct PreviewView: View {
                             .padding(16)
                             .background(
                                 RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                    .fill(Color.white.opacity(0.05))
+                                    .fill(Theme.surfaceSunken)
                             )
                             .overlay(
                                 RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -141,7 +141,7 @@ struct PreviewView: View {
                 .padding(.vertical, 16)
                 .background(
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .fill(Color.white.opacity(0.09))
+                        .fill(Theme.controlStrong)
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 18, style: .continuous)

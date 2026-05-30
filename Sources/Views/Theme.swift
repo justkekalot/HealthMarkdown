@@ -1,71 +1,93 @@
 import SwiftUI
+import UIKit
 
-/// Centralised visual language: colors, gradients, and reusable modifiers.
-enum Theme {
-    // Core palette — a warm-to-cool health spectrum on near-black.
-    static let bg = Color(red: 0.04, green: 0.04, blue: 0.06)
-    static let card = Color.white.opacity(0.06)
-    static let cardStroke = Color.white.opacity(0.10)
-    static let textPrimary = Color.white
-    static let textSecondary = Color.white.opacity(0.62)
-
-    static let accent = Color(red: 1.0, green: 0.32, blue: 0.40)      // vital pink-red
-    static let accent2 = Color(red: 0.42, green: 0.45, blue: 1.0)     // cool indigo
-    static let mint = Color(red: 0.20, green: 0.92, blue: 0.70)
-
-    static var heroGradient: LinearGradient {
-        LinearGradient(
-            colors: [accent, accent2],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
+/// A color that resolves differently in light and dark mode.
+extension Color {
+    init(lightHex light: UInt32, darkHex dark: UInt32) {
+        self = Color(uiColor: UIColor { traits in
+            traits.userInterfaceStyle == .dark ? UIColor(rgb: dark) : UIColor(rgb: light)
+        })
     }
+}
 
-    static var subtleGradient: LinearGradient {
-        LinearGradient(
-            colors: [accent.opacity(0.18), accent2.opacity(0.10)],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
+private extension UIColor {
+    convenience init(rgb: UInt32) {
+        self.init(
+            red: CGFloat((rgb >> 16) & 0xFF) / 255,
+            green: CGFloat((rgb >> 8) & 0xFF) / 255,
+            blue: CGFloat(rgb & 0xFF) / 255,
+            alpha: 1
         )
     }
 }
 
-/// Animated ambient background — soft drifting blobs behind everything.
-struct AmbientBackground: View {
-    @State private var animate = false
+/// Centralised visual language.
+///
+/// Design direction — "clinical editorial": this is a tool that turns your
+/// health into a *document*, so the look is paper-and-ink, not neon. One warm
+/// terracotta accent (a quiet nod to the heart / vitality), generous space,
+/// hairline borders, depth from soft shadow rather than glow. Fully adaptive to
+/// light and dark.
+enum Theme {
+    // Surfaces
+    static let bg = Color(lightHex: 0xF4F1EA, darkHex: 0x141310)        // warm paper / warm near-black
+    static let bgElevated = Color(lightHex: 0xFBFAF6, darkHex: 0x1C1A16)
+    static let surface = Color(lightHex: 0xFFFFFF, darkHex: 0x201E19)   // cards
+    static let surfaceSunken = Color(lightHex: 0xEFEBE2, darkHex: 0x100F0C)
 
+    // Ink
+    static let textPrimary = Color(lightHex: 0x1A1714, darkHex: 0xF2EDE4)
+    static let textSecondary = Color(lightHex: 0x6E665B, darkHex: 0xA49C90)
+    static let hairline = Color(lightHex: 0x000000, darkHex: 0xFFFFFF)  // used at low opacity
+
+    // Accent — a single editorial terracotta. Slightly brighter in the dark.
+    static let accent = Color(lightHex: 0xC1543A, darkHex: 0xE0694C)
+    static let accentDeep = Color(lightHex: 0xA8442E, darkHex: 0xC9583D)
+    static let accentSoft = Color(lightHex: 0xEFD9D0, darkHex: 0x3A271F) // tinted fills
+
+    // Supporting tones (kept for API compatibility with existing views)
+    static let accent2 = Color(lightHex: 0x4F6F64, darkHex: 0x7FA493)   // muted evergreen
+    static let mint = Color(lightHex: 0x3E7D5A, darkHex: 0x5FB286)      // success
+
+    static var cardStroke: Color { hairline.opacity(0.08) }
+    static var card: Color { surface }
+    /// Fill for unselected controls / sunken wells (adapts; replaces the old
+    /// white-opacity fills that only worked on a dark background).
+    static var control: Color { hairline.opacity(0.05) }
+    static var controlStrong: Color { hairline.opacity(0.08) }
+    /// Tint badge fill used behind small icons.
+    static var iconChip: Color { accentSoft }
+
+    /// Hero fill for the icon mark / primary button — a restrained two-stop of
+    /// the accent itself, not a rainbow.
+    static var heroGradient: LinearGradient {
+        LinearGradient(colors: [accent, accentDeep], startPoint: .top, endPoint: .bottom)
+    }
+
+    /// Quiet tinted fill for selected states.
+    static var subtleGradient: LinearGradient {
+        LinearGradient(colors: [accentSoft, accentSoft], startPoint: .top, endPoint: .bottom)
+    }
+}
+
+/// Calm editorial background — a warm flat field with one barely-there tonal
+/// wash at the top. No floating neon blobs.
+struct AmbientBackground: View {
     var body: some View {
         ZStack {
             Theme.bg.ignoresSafeArea()
-
-            Circle()
-                .fill(Theme.accent.opacity(0.35))
-                .frame(width: 360, height: 360)
-                .blur(radius: 120)
-                .offset(x: animate ? -120 : -80, y: animate ? -260 : -300)
-
-            Circle()
-                .fill(Theme.accent2.opacity(0.32))
-                .frame(width: 320, height: 320)
-                .blur(radius: 130)
-                .offset(x: animate ? 140 : 110, y: animate ? 320 : 360)
-
-            Circle()
-                .fill(Theme.mint.opacity(0.16))
-                .frame(width: 260, height: 260)
-                .blur(radius: 120)
-                .offset(x: animate ? -160 : -120, y: animate ? 260 : 220)
-        }
-        .ignoresSafeArea()
-        .onAppear {
-            withAnimation(.easeInOut(duration: 9).repeatForever(autoreverses: true)) {
-                animate = true
-            }
+            LinearGradient(
+                colors: [Theme.accentSoft.opacity(0.35), Theme.bg.opacity(0)],
+                startPoint: .top,
+                endPoint: .center
+            )
+            .ignoresSafeArea()
         }
     }
 }
 
-/// Glass card container.
+/// Surface card — solid paper with a hairline border and a soft, low shadow.
+/// (Name kept for API compatibility; the look is paper, not glass.)
 struct GlassCard<Content: View>: View {
     var padding: CGFloat = 18
     @ViewBuilder var content: Content
@@ -74,22 +96,18 @@ struct GlassCard<Content: View>: View {
         content
             .padding(padding)
             .background(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(Theme.card)
-                    .background(
-                        RoundedRectangle(cornerRadius: 22, style: .continuous)
-                            .fill(.ultraThinMaterial)
-                    )
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(Theme.surface)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .stroke(Theme.cardStroke, lineWidth: 1)
             )
-            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .shadow(color: Theme.hairline.opacity(0.06), radius: 14, x: 0, y: 8)
     }
 }
 
-/// Primary call-to-action button style.
+/// Primary call-to-action — solid accent, white text, restrained shadow.
 struct PrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -98,15 +116,11 @@ struct PrimaryButtonStyle: ButtonStyle {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
             .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(Theme.heroGradient)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Theme.accent)
             )
-            .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(.white.opacity(0.18), lineWidth: 1)
-            )
-            .shadow(color: Theme.accent.opacity(0.4), radius: 18, x: 0, y: 10)
-            .scaleEffect(configuration.isPressed ? 0.97 : 1)
-            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: configuration.isPressed)
+            .shadow(color: Theme.accent.opacity(0.28), radius: 12, x: 0, y: 6)
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: configuration.isPressed)
     }
 }

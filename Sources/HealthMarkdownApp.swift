@@ -10,7 +10,6 @@ struct HealthMarkdownApp: App {
             RootView()
                 .environmentObject(health)
                 .environmentObject(exports)
-                .preferredColorScheme(.dark)
         }
     }
 }

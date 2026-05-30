@@ -99,11 +99,11 @@ struct DashboardView: View {
                 HStack {
                     ZStack {
                         RoundedRectangle(cornerRadius: 11, style: .continuous)
-                            .fill(selected ? AnyShapeStyle(Theme.heroGradient) : AnyShapeStyle(Color.white.opacity(0.08)))
+                            .fill(selected ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(Theme.control))
                             .frame(width: 38, height: 38)
                         Image(systemName: mode.symbol)
                             .font(.system(size: 17, weight: .semibold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(selected ? Color.white : Theme.accent)
                     }
                     Spacer()
                     Image(systemName: selected ? "checkmark.circle.fill" : "circle")
@@ -160,7 +160,7 @@ struct DashboardView: View {
                 .padding(.vertical, 10)
                 .padding(.horizontal, 16)
                 .background(
-                    Capsule().fill(selected ? AnyShapeStyle(Theme.heroGradient) : AnyShapeStyle(Color.white.opacity(0.06)))
+                    Capsule().fill(selected ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(Theme.control))
                 )
                 .overlay(
                     Capsule().stroke(selected ? Color.clear : Theme.cardStroke, lineWidth: 1)
@@ -216,9 +216,9 @@ struct DashboardView: View {
                 }
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
-                        Capsule().fill(Color.white.opacity(0.08))
+                        Capsule().fill(Theme.control)
                         Capsule()
-                            .fill(Theme.heroGradient)
+                            .fill(Theme.accent)
                             .frame(width: max(8, geo.size.width * progress))
                             .animation(.easeInOut(duration: 0.3), value: progress)
                     }
@@ -310,13 +310,12 @@ struct FlowChips: View {
                         .font(.caption.weight(.medium))
                         .lineLimit(1)
                 }
-                .foregroundStyle(Theme.textPrimary)
+                .foregroundStyle(Theme.accent)
                 .padding(.vertical, 7)
                 .padding(.horizontal, 10)
                 .background(
-                    Capsule().fill(Color.white.opacity(0.07))
+                    Capsule().fill(Theme.iconChip)
                 )
-                .overlay(Capsule().stroke(Theme.cardStroke, lineWidth: 1))
             }
         }
     }

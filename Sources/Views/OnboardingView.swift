@@ -5,51 +5,59 @@ struct OnboardingView: View {
     @State private var appear = false
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(alignment: .leading, spacing: 0) {
             Spacer()
 
-            // Hero mark
-            ZStack {
-                RoundedRectangle(cornerRadius: 32, style: .continuous)
-                    .fill(Theme.heroGradient)
-                    .frame(width: 120, height: 120)
-                    .shadow(color: Theme.accent.opacity(0.5), radius: 30, x: 0, y: 18)
-                Image(systemName: "heart.text.square.fill")
-                    .font(.system(size: 58, weight: .bold))
-                    .foregroundStyle(.white)
+            // Wordmark — editorial, left-aligned.
+            HStack(spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Theme.heroGradient)
+                        .frame(width: 54, height: 54)
+                        .shadow(color: Theme.accent.opacity(0.3), radius: 12, x: 0, y: 6)
+                    Image(systemName: "heart.text.square.fill")
+                        .font(.system(size: 26, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+                Text("HealthMarkdown")
+                    .font(.system(.callout, design: .rounded).weight(.semibold))
+                    .foregroundStyle(Theme.textSecondary)
+                    .tracking(0.5)
             }
-            .scaleEffect(appear ? 1 : 0.7)
+            .scaleEffect(appear ? 1 : 0.9, anchor: .leading)
             .opacity(appear ? 1 : 0)
 
-            VStack(spacing: 12) {
-                Text("Health → Markdown")
-                    .font(.system(size: 34, weight: .bold, design: .rounded))
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Your health,\nas one clean file.")
+                    .font(.system(size: 40, weight: .bold, design: .serif))
                     .foregroundStyle(Theme.textPrimary)
-                    .multilineTextAlignment(.center)
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                Text("Turn everything in Apple Health into one clean Markdown file — ready to hand to your AI assistant.")
+                Text("HealthMarkdown reads everything in Apple Health and writes it into a single Markdown document — built to hand straight to an AI assistant.")
                     .font(.body)
                     .foregroundStyle(Theme.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
+                    .lineSpacing(3)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.top, 28)
             .opacity(appear ? 1 : 0)
             .offset(y: appear ? 0 : 16)
 
-            VStack(spacing: 14) {
-                FeatureRow(icon: "lock.shield.fill", title: "Private by design", subtitle: "Read on-device. Nothing leaves your phone unless you share it.")
-                FeatureRow(icon: "square.grid.2x2.fill", title: "40+ metrics", subtitle: "Activity, heart, sleep, vitals, nutrition, workouts & more.")
-                FeatureRow(icon: "doc.text.fill", title: "Agent-ready format", subtitle: "Structured tables an LLM can read at a glance.")
+            VStack(alignment: .leading, spacing: 4) {
+                FeatureRow(icon: "lock.fill", title: "Private by design", subtitle: "Read on-device. Nothing leaves your phone unless you share it.")
+                Divider().overlay(Theme.cardStroke)
+                FeatureRow(icon: "square.stack.3d.up.fill", title: "40+ metrics", subtitle: "Activity, heart, sleep, vitals, nutrition, workouts & more.")
+                Divider().overlay(Theme.cardStroke)
+                FeatureRow(icon: "doc.plaintext.fill", title: "Agent-ready format", subtitle: "Structured tables an LLM can read at a glance.")
             }
-            .padding(.top, 36)
-            .padding(.horizontal, 24)
+            .padding(.top, 40)
             .opacity(appear ? 1 : 0)
             .offset(y: appear ? 0 : 24)
 
             Spacer()
 
-            VStack(spacing: 14) {
+            VStack(alignment: .leading, spacing: 14) {
                 if health.authState == .unavailable {
                     Text("Health data isn't available on this device.")
                         .font(.subheadline)
@@ -74,16 +82,20 @@ struct OnboardingView: View {
                         Text("Couldn't get access. You can grant it later in Settings → Health → Data Access.")
                             .font(.footnote)
                             .foregroundStyle(Theme.textSecondary)
-                            .multilineTextAlignment(.center)
+                    } else {
+                        Text("One tap. Read-only. Revoke anytime in Settings.")
+                            .font(.footnote)
+                            .foregroundStyle(Theme.textSecondary)
+                            .frame(maxWidth: .infinity, alignment: .center)
                     }
                 }
             }
-            .padding(.horizontal, 24)
-            .padding(.bottom, 24)
             .opacity(appear ? 1 : 0)
         }
+        .padding(.horizontal, 28)
+        .padding(.bottom, 28)
         .onAppear {
-            withAnimation(.spring(response: 0.7, dampingFraction: 0.7).delay(0.1)) {
+            withAnimation(.spring(response: 0.7, dampingFraction: 0.8).delay(0.1)) {
                 appear = true
             }
         }
@@ -97,14 +109,10 @@ private struct FeatureRow: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            ZStack {
-                Circle()
-                    .fill(Theme.subtleGradient)
-                    .frame(width: 46, height: 46)
-                Image(systemName: icon)
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(.white)
-            }
+            Image(systemName: icon)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(Theme.accent)
+                .frame(width: 30)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.subheadline.weight(.semibold))
@@ -112,8 +120,10 @@ private struct FeatureRow: View {
                 Text(subtitle)
                     .font(.footnote)
                     .foregroundStyle(Theme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Spacer()
         }
+        .padding(.vertical, 12)
     }
 }
