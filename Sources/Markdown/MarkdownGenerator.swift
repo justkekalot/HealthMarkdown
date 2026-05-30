@@ -205,11 +205,13 @@ enum MarkdownGenerator {
             for serie in series.sorted(by: { $0.spec.title < $1.spec.title }) {
                 s += "#### \(serie.spec.title) (\(serie.spec.unitLabel)) — \(serie.samples.count) samples\n\n"
                 s += "| Start | End | Value | Source |\n|---|---|---|---|\n"
+                // ISO-8601 timestamps: compact, unambiguous for an agent, and the
+                // formatter is cached so this stays fast even at 100k+ rows.
                 for sample in serie.samples {
                     let value = Fmt.number(sample.value, precision: serie.spec.precision)
-                    let end = sample.end == sample.start ? "—" : Fmt.dateTime(sample.end)
+                    let end = sample.end == sample.start ? "—" : Fmt.isoTimestamp(sample.end)
                     let source = sample.source ?? "—"
-                    s += "| \(Fmt.dateTime(sample.start)) | \(end) | \(value) | \(source) |\n"
+                    s += "| \(Fmt.isoTimestamp(sample.start)) | \(end) | \(value) | \(source) |\n"
                 }
                 s += "\n"
             }

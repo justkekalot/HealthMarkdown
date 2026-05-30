@@ -1,13 +1,41 @@
 import Foundation
 
 enum Fmt {
-    static func number(_ value: Double, precision: Int) -> String {
+    // Formatters are expensive to allocate (especially NumberFormatter). A full
+    // all-time raw dump can be hundreds of thousands of rows, so we allocate
+    // each formatter exactly once and reuse it — this is the difference between
+    // a multi-minute hang and a sub-second format pass.
+    private static let decimal: NumberFormatter = {
         let nf = NumberFormatter()
         nf.numberStyle = .decimal
-        nf.maximumFractionDigits = precision
         nf.minimumFractionDigits = 0
         nf.groupingSeparator = ","
-        return nf.string(from: NSNumber(value: value)) ?? String(format: "%.\(precision)f", value)
+        return nf
+    }()
+
+    private static let shortDateFormatter: DateFormatter = {
+        let df = DateFormatter()
+        df.dateStyle = .medium
+        df.timeStyle = .none
+        return df
+    }()
+
+    private static let dateTimeFormatter: DateFormatter = {
+        let df = DateFormatter()
+        df.dateStyle = .medium
+        df.timeStyle = .short
+        return df
+    }()
+
+    private static let isoFormatter: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+
+    static func number(_ value: Double, precision: Int) -> String {
+        decimal.maximumFractionDigits = precision
+        return decimal.string(from: NSNumber(value: value)) ?? String(format: "%.\(precision)f", value)
     }
 
     static func value(_ value: Double?, _ spec: QuantitySpec) -> String? {
@@ -24,22 +52,14 @@ enum Fmt {
     }
 
     static func shortDate(_ date: Date) -> String {
-        let df = DateFormatter()
-        df.dateStyle = .medium
-        df.timeStyle = .none
-        return df.string(from: date)
+        shortDateFormatter.string(from: date)
     }
 
     static func dateTime(_ date: Date) -> String {
-        let df = DateFormatter()
-        df.dateStyle = .medium
-        df.timeStyle = .short
-        return df.string(from: date)
+        dateTimeFormatter.string(from: date)
     }
 
     static func isoTimestamp(_ date: Date) -> String {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime]
-        return f.string(from: date)
+        isoFormatter.string(from: date)
     }
 }

@@ -204,7 +204,9 @@ struct DashboardView: View {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
                     ProgressView().tint(Theme.accent)
-                    Text("Reading \(label)…")
+                    // The final formatting step supplies a full sentence; the
+                    // per-metric fetch steps are bare names, so prefix "Reading".
+                    Text(progress >= 1 ? label : "Reading \(label)…")
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(Theme.textPrimary)
                     Spacer()
