@@ -8,6 +8,7 @@ struct RecoveryView: View {
     @State private var report: RecoveryReport?
     @State private var narrative: String = ""
     @State private var loading = true
+    @State private var showAsk = false
 
     private let narrator: RecoveryNarrator = TemplateNarrator()
 
@@ -24,6 +25,7 @@ struct RecoveryView: View {
                             scoreCard(report)
                             narrativeCard
                             metricsCard(report)
+                            askButton
                         } else {
                             emptyCard
                         }
@@ -38,6 +40,9 @@ struct RecoveryView: View {
             .toolbarBackground(.hidden, for: .navigationBar)
             .task { await load() }
             .refreshable { await load() }
+            .sheet(isPresented: $showAsk) {
+                if let report { AskView(report: report) }
+            }
         }
     }
 
@@ -114,6 +119,16 @@ struct RecoveryView: View {
                 Spacer()
             }
         }
+    }
+
+    private var askButton: some View {
+        Button { showAsk = true } label: {
+            HStack {
+                Image(systemName: "bubble.left.and.text.bubble.right.fill")
+                Text("Ask about today")
+            }
+        }
+        .buttonStyle(PrimaryButtonStyle())
     }
 
     private var narrativeCard: some View {
