@@ -67,11 +67,11 @@ struct PaywallView: View {
                     .font(.system(size: 30, weight: .semibold))
                     .foregroundStyle(.white)
             }
-            Text("You've used your free export.")
+            Text("Unlock the full export.")
                 .font(.system(size: 30, weight: .bold, design: .serif))
                 .foregroundStyle(Theme.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
-            Text("Unlock unlimited exports with a single one-time purchase.")
+            Text("Quick · 24 hours is always free. Unlock once for every period and the full raw export — forever.")
                 .font(.body)
                 .foregroundStyle(Theme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)

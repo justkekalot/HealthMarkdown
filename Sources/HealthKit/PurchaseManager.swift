@@ -18,16 +18,18 @@ final class PurchaseManager: ObservableObject {
     @Published private(set) var purchaseInFlight = false
     @Published var lastError: String?
 
-    private let freeUsedKey = "freeExportUsed"
     private var updatesTask: Task<Void, Never>?
 
-    var freeExportUsed: Bool {
-        UserDefaults.standard.bool(forKey: freeUsedKey)
+    /// The free tier: Quick export over the last 24 hours, always available.
+    /// Everything else (Full, or any longer/custom window) requires the unlock.
+    static func isFreeCombo(mode: ExportMode, range: DateRangeOption) -> Bool {
+        mode == .quick && range == .last24Hours
     }
 
-    /// Can the user generate right now? Always yes if unlocked or the free export
-    /// hasn't been spent yet.
-    var canExport: Bool { isUnlocked || !freeExportUsed }
+    /// Can the user generate this specific combo right now?
+    func canExport(mode: ExportMode, range: DateRangeOption) -> Bool {
+        isUnlocked || Self.isFreeCombo(mode: mode, range: range)
+    }
 
     /// Price string for UI, e.g. "$4.99". Nil until the product loads.
     var priceText: String? { product?.displayPrice }
@@ -104,16 +106,6 @@ final class PurchaseManager: ObservableObject {
         } catch {
             lastError = "Couldn't restore purchases. Try again."
         }
-    }
-
-    // MARK: - Free export accounting
-
-    /// Mark the one free export as spent. Called after a successful generate when
-    /// the user is not unlocked.
-    func markFreeExportUsed() {
-        guard !isUnlocked else { return }
-        UserDefaults.standard.set(true, forKey: freeUsedKey)
-        objectWillChange.send()
     }
 
     // MARK: - Transaction updates

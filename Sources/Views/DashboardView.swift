@@ -209,11 +209,15 @@ struct DashboardView: View {
         }
     }
 
+    private var canExportNow: Bool {
+        purchases.canExport(mode: selectedMode, range: selectedRange)
+    }
+
     private var generateButton: some View {
         VStack(spacing: 10) {
             Button {
-                // First export is free; after that, require the one-time unlock.
-                guard purchases.canExport else {
+                // Free tier is Quick · 24h. Anything else requires the unlock.
+                guard canExportNow else {
                     showPaywall = true
                     return
                 }
@@ -221,21 +225,20 @@ struct DashboardView: View {
                     await health.generateReport(for: selectedRange, mode: selectedMode, customInterval: customInterval)
                     if health.phase == .done, let report = health.lastReport {
                         freshRecord = exports.save(report: report, markdown: health.lastMarkdown)
-                        purchases.markFreeExportUsed()
                     }
                 }
             } label: {
                 HStack {
-                    Image(systemName: purchases.canExport ? "sparkles" : "lock.fill")
-                    Text("Generate \(selectedMode.title) export")
+                    Image(systemName: canExportNow ? "sparkles" : "lock.fill")
+                    Text(canExportNow ? "Generate \(selectedMode.title) export" : "Unlock to export")
                 }
             }
             .buttonStyle(PrimaryButtonStyle())
 
             if !purchases.isUnlocked {
-                Text(purchases.freeExportUsed
-                     ? "Free export used — unlock for unlimited."
-                     : "Your first export is free.")
+                Text(canExportNow
+                     ? "Free: Quick export for the last 24 hours."
+                     : "Longer periods and Full exports need a one-time unlock.")
                     .font(.footnote)
                     .foregroundStyle(Theme.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .center)
