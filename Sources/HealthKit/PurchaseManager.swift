@@ -20,10 +20,11 @@ final class PurchaseManager: ObservableObject {
 
     private var updatesTask: Task<Void, Never>?
 
-    /// The free tier: any export (Quick or Full) over the last 24 hours.
-    /// Any longer/custom window requires the unlock.
+    /// The free tier: Quick (aggregated) export over ANY period — generous on
+    /// purpose so the free output sells the app in screenshots. The paid tier is
+    /// the Full raw export (and, later, Gemma Q&A).
     static func isFreeCombo(mode: ExportMode, range: DateRangeOption) -> Bool {
-        range == .last24Hours
+        mode == .quick
     }
 
     /// Can the user generate this specific combo right now?

@@ -15,9 +15,9 @@ struct PaywallView: View {
                         header
 
                         VStack(alignment: .leading, spacing: 4) {
-                            benefit("infinity", "Unlimited exports", "Quick and Full, any time window — forever.")
+                            benefit("tray.full.fill", "Full raw export", "Every individual sample, any period — the real data for deep analysis.")
                             Divider().overlay(Theme.cardStroke)
-                            benefit("checkmark.seal.fill", "One-time purchase", "Pay once. No subscription, no recurring charge.")
+                            benefit("checkmark.seal.fill", "One-time purchase", "Pay once. No subscription, no recurring charge — ever.")
                             Divider().overlay(Theme.cardStroke)
                             benefit("lock.fill", "Stays private", "Everything is still read on-device and never uploaded.")
                         }
@@ -71,7 +71,7 @@ struct PaywallView: View {
                 .font(.system(size: 30, weight: .bold, design: .serif))
                 .foregroundStyle(Theme.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
-            Text("The last 24 hours is always free. Unlock once for every longer period — forever.")
+            Text("Quick summaries are always free. Unlock once for the full raw export — every sample, every period — forever.")
                 .font(.body)
                 .foregroundStyle(Theme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
