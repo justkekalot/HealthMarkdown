@@ -71,7 +71,7 @@ struct PaywallView: View {
                 .font(.system(size: 30, weight: .bold, design: .serif))
                 .foregroundStyle(Theme.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
-            Text("Quick · 24 hours is always free. Unlock once for every period and the full raw export — forever.")
+            Text("The last 24 hours is always free. Unlock once for every longer period — forever.")
                 .font(.body)
                 .foregroundStyle(Theme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -114,6 +114,17 @@ struct PaywallView: View {
             Text("One-time payment · no subscription")
                 .font(.footnote)
                 .foregroundStyle(Theme.textSecondary)
+
+            #if DEBUG
+            Button {
+                purchases.debugToggleUnlock()
+            } label: {
+                Text("Dev: simulate unlock (testing)")
+                    .font(.caption)
+                    .foregroundStyle(Theme.accent)
+            }
+            .padding(.top, 2)
+            #endif
         }
         .padding(16)
         .background(

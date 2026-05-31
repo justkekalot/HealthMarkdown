@@ -20,10 +20,10 @@ final class PurchaseManager: ObservableObject {
 
     private var updatesTask: Task<Void, Never>?
 
-    /// The free tier: Quick export over the last 24 hours, always available.
-    /// Everything else (Full, or any longer/custom window) requires the unlock.
+    /// The free tier: any export (Quick or Full) over the last 24 hours.
+    /// Any longer/custom window requires the unlock.
     static func isFreeCombo(mode: ExportMode, range: DateRangeOption) -> Bool {
-        mode == .quick && range == .last24Hours
+        range == .last24Hours
     }
 
     /// Can the user generate this specific combo right now?
@@ -38,6 +38,9 @@ final class PurchaseManager: ObservableObject {
         updatesTask = listenForTransactions()
         Task {
             await refreshEntitlements()
+            #if DEBUG
+            applyDebugUnlockIfSet()
+            #endif
             await loadProduct()
         }
     }
@@ -107,6 +110,24 @@ final class PurchaseManager: ObservableObject {
             lastError = "Couldn't restore purchases. Try again."
         }
     }
+
+    #if DEBUG
+    /// Dev-only: flip the unlock without a real transaction, so gated features
+    /// can be tested before App Store Connect / sandbox is set up. Persisted so
+    /// it survives relaunch; toggle off to re-test the paywall.
+    private let debugUnlockKey = "debugUnlock"
+    var debugUnlocked: Bool { UserDefaults.standard.bool(forKey: debugUnlockKey) }
+    func debugToggleUnlock() {
+        let v = !debugUnlocked
+        UserDefaults.standard.set(v, forKey: debugUnlockKey)
+        isUnlocked = v || isUnlocked
+        if !v { Task { await refreshEntitlements() } }
+        objectWillChange.send()
+    }
+    func applyDebugUnlockIfSet() {
+        if debugUnlocked { isUnlocked = true }
+    }
+    #endif
 
     // MARK: - Transaction updates
 

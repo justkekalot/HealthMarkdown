@@ -237,8 +237,8 @@ struct DashboardView: View {
 
             if !purchases.isUnlocked {
                 Text(canExportNow
-                     ? "Free: Quick export for the last 24 hours."
-                     : "Longer periods and Full exports need a one-time unlock.")
+                     ? "Free: any export for the last 24 hours."
+                     : "Periods longer than 24 hours need a one-time unlock.")
                     .font(.footnote)
                     .foregroundStyle(Theme.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .center)
