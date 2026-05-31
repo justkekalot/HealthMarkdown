@@ -38,19 +38,19 @@ struct MainTabView: View {
         TabView(selection: $selection) {
             RecoveryView()
                 .tabItem {
-                    Label("Readiness", systemImage: "sun.max.fill")
+                    Label("Readiness", image: "tab-readiness")
                 }
                 .tag(0)
 
             DashboardView()
                 .tabItem {
-                    Label("Export", systemImage: "square.and.arrow.up")
+                    Label("Export", image: "tab-export")
                 }
                 .tag(1)
 
             HistoryView()
                 .tabItem {
-                    Label("History", systemImage: "clock.arrow.circlepath")
+                    Label("History", image: "tab-history")
                 }
                 .tag(2)
         }
