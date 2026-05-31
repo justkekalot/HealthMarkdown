@@ -3,9 +3,15 @@ import SwiftUI
 struct DashboardView: View {
     @EnvironmentObject var health: HealthKitManager
     @EnvironmentObject var exports: ExportStore
+    @EnvironmentObject var purchases: PurchaseManager
     @State private var selectedRange: DateRangeOption = .last30Days
     @State private var selectedMode: ExportMode = .quick
     @State private var showPreview = false
+    @State private var showPaywall = false
+    @State private var showCustomRange = false
+    // Custom range bounds (default: last 24h), used when selectedRange == .custom.
+    @State private var customStart = Calendar.current.date(byAdding: .day, value: -1, to: Date()) ?? Date()
+    @State private var customEnd = Date()
     /// The record produced by the most recent Generate with the *current*
     /// inputs. Cleared whenever mode/range change so a stale result never lingers.
     @State private var freshRecord: ExportRecord?
@@ -13,6 +19,10 @@ struct DashboardView: View {
     private var isFetching: Bool {
         if case .fetching = health.phase { return true }
         return false
+    }
+
+    private var customInterval: DateInterval {
+        DateInterval(start: min(customStart, customEnd), end: max(customStart, customEnd))
     }
 
     var body: some View {
@@ -42,6 +52,12 @@ struct DashboardView: View {
             if let report = health.lastReport {
                 PreviewView(report: report, markdown: health.lastMarkdown)
             }
+        }
+        .sheet(isPresented: $showPaywall) {
+            PaywallView()
+        }
+        .sheet(isPresented: $showCustomRange) {
+            CustomRangeSheet(start: $customStart, end: $customEnd)
         }
     }
 
@@ -153,20 +169,31 @@ struct DashboardView: View {
                 selectedRange = option
                 invalidateResult()
             }
+            if option.isCustom { showCustomRange = true }
         } label: {
-            Text(option.title)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(selected ? .white : Theme.textPrimary)
-                .padding(.vertical, 10)
-                .padding(.horizontal, 16)
-                .background(
-                    Capsule().fill(selected ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(Theme.control))
-                )
-                .overlay(
-                    Capsule().stroke(selected ? Color.clear : Theme.cardStroke, lineWidth: 1)
-                )
+            HStack(spacing: 6) {
+                if option.isCustom {
+                    Image(systemName: "calendar")
+                        .font(.caption.weight(.semibold))
+                }
+                Text(option.isCustom && selected ? customChipTitle : option.title)
+                    .font(.subheadline.weight(.semibold))
+            }
+            .foregroundStyle(selected ? .white : Theme.textPrimary)
+            .padding(.vertical, 10)
+            .padding(.horizontal, 16)
+            .background(
+                Capsule().fill(selected ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(Theme.control))
+            )
+            .overlay(
+                Capsule().stroke(selected ? Color.clear : Theme.cardStroke, lineWidth: 1)
+            )
         }
         .buttonStyle(.plain)
+    }
+
+    private var customChipTitle: String {
+        "\(Fmt.shortDate(customInterval.start)) – \(Fmt.shortDate(customInterval.end))"
     }
 
     // MARK: - Step 3: action / progress / result
@@ -183,20 +210,37 @@ struct DashboardView: View {
     }
 
     private var generateButton: some View {
-        Button {
-            Task {
-                await health.generateReport(for: selectedRange, mode: selectedMode)
-                if health.phase == .done, let report = health.lastReport {
-                    freshRecord = exports.save(report: report, markdown: health.lastMarkdown)
+        VStack(spacing: 10) {
+            Button {
+                // First export is free; after that, require the one-time unlock.
+                guard purchases.canExport else {
+                    showPaywall = true
+                    return
+                }
+                Task {
+                    await health.generateReport(for: selectedRange, mode: selectedMode, customInterval: customInterval)
+                    if health.phase == .done, let report = health.lastReport {
+                        freshRecord = exports.save(report: report, markdown: health.lastMarkdown)
+                        purchases.markFreeExportUsed()
+                    }
+                }
+            } label: {
+                HStack {
+                    Image(systemName: purchases.canExport ? "sparkles" : "lock.fill")
+                    Text("Generate \(selectedMode.title) export")
                 }
             }
-        } label: {
-            HStack {
-                Image(systemName: "sparkles")
-                Text("Generate \(selectedMode.title) export")
+            .buttonStyle(PrimaryButtonStyle())
+
+            if !purchases.isUnlocked {
+                Text(purchases.freeExportUsed
+                     ? "Free export used — unlock for unlimited."
+                     : "Your first export is free.")
+                    .font(.footnote)
+                    .foregroundStyle(Theme.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
             }
         }
-        .buttonStyle(PrimaryButtonStyle())
     }
 
     private func progressCard(progress: Double, label: String) -> some View {
@@ -318,5 +362,36 @@ struct FlowChips: View {
                 )
             }
         }
+    }
+}
+
+/// Sheet for picking a custom start/end window.
+struct CustomRangeSheet: View {
+    @Binding var start: Date
+    @Binding var end: Date
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Theme.bg.ignoresSafeArea()
+                Form {
+                    DatePicker("Start", selection: $start, in: ...end, displayedComponents: [.date, .hourAndMinute])
+                    DatePicker("End", selection: $end, in: start..., displayedComponents: [.date, .hourAndMinute])
+                }
+                .scrollContentBackground(.hidden)
+                .tint(Theme.accent)
+            }
+            .navigationTitle("Custom period")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(Theme.accent)
+                }
+            }
+        }
+        .presentationDetents([.medium])
     }
 }

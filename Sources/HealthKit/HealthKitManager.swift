@@ -70,12 +70,12 @@ final class HealthKitManager: ObservableObject {
 
     // MARK: - Report generation
 
-    func generateReport(for range: DateRangeOption, mode: ExportMode) async {
+    func generateReport(for range: DateRangeOption, mode: ExportMode, customInterval: DateInterval? = nil) async {
         guard isAvailable else {
             phase = .failed("Health data isn't available on this device.")
             return
         }
-        let interval = range.interval()
+        let interval = range.interval(customInterval: customInterval)
         var report = HealthReport(generatedAt: Date(), range: range, mode: mode, interval: interval)
 
         let predicate = HKQuery.predicateForSamples(withStart: interval.start, end: interval.end, options: .strictStartDate)

@@ -1,0 +1,34 @@
+{
+  "identifier" : "A1B2C3D4",
+  "nonRenewingSubscriptions" : [],
+  "products" : [
+    {
+      "displayPrice" : "4.99",
+      "familyShareable" : false,
+      "internalID" : "UNLOCK001",
+      "localizations" : [
+        {
+          "description" : "Unlock unlimited Health exports forever. One-time purchase, no subscription.",
+          "displayName" : "Unlock Everything",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "app.escrime.healthmarkdown.unlock",
+      "referenceName" : "Unlock Everything",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+    "_applicationInternalID" : "HealthMarkdown",
+    "_developerTeamID" : "MF369BT56X",
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_US",
+    "_storefront" : "USA",
+    "_storeKitErrors" : []
+  },
+  "subscriptionGroups" : [],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}
