@@ -2,21 +2,28 @@ import SwiftUI
 
 struct RootView: View {
     @EnvironmentObject var health: HealthKitManager
+    @AppStorage("hasSeenIntro") private var hasSeenIntro = false
 
     var body: some View {
         ZStack {
             AmbientBackground()
 
-            switch health.authState {
-            case .unknown, .requesting, .unavailable, .denied:
-                OnboardingView()
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
-            case .authorized:
-                MainTabView()
+            if !hasSeenIntro && health.authState != .authorized {
+                IntroCarousel { withAnimation { hasSeenIntro = true } }
                     .transition(.opacity)
+            } else {
+                switch health.authState {
+                case .unknown, .requesting, .unavailable, .denied:
+                    OnboardingView()
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                case .authorized:
+                    MainTabView()
+                        .transition(.opacity)
+                }
             }
         }
         .animation(.spring(response: 0.5, dampingFraction: 0.85), value: health.authState)
+        .animation(.spring(response: 0.5, dampingFraction: 0.85), value: hasSeenIntro)
     }
 }
 
