@@ -36,17 +36,23 @@ struct MainTabView: View {
 
     var body: some View {
         TabView(selection: $selection) {
-            DashboardView()
+            RecoveryView()
                 .tabItem {
-                    Label("Export", systemImage: "sparkles")
+                    Label("Readiness", systemImage: "sun.max.fill")
                 }
                 .tag(0)
+
+            DashboardView()
+                .tabItem {
+                    Label("Export", systemImage: "square.and.arrow.up")
+                }
+                .tag(1)
 
             HistoryView()
                 .tabItem {
                     Label("History", systemImage: "clock.arrow.circlepath")
                 }
-                .tag(1)
+                .tag(2)
         }
         .tint(Theme.accent)
     }

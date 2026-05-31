@@ -28,7 +28,7 @@ final class HealthKitManager: ObservableObject {
     /// preview/share never regenerates a large document on the UI thread.
     @Published var lastMarkdown: String = ""
 
-    private let store = HKHealthStore()
+    let store = HKHealthStore()
     private let connectedKey = "hasConnectedHealth"
 
     var isAvailable: Bool { HKHealthStore.isHealthDataAvailable() }
