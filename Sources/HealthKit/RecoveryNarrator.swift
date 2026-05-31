@@ -24,38 +24,34 @@ struct TemplateNarrator: RecoveryNarrator {
             return "I don't have enough overnight data yet. Wear your watch to sleep for a night or two and I'll start comparing your recovery morning over morning."
         }
 
-        var lines: [String] = []
-        if let s = report.score {
-            lines.append("**\(report.headline)** — recovery \(s)/100.")
+        // Interpretation, not a re-list — the metric rows below already show the
+        // numbers. Here we say what they *mean* together, then one nudge.
+        var parts: [String] = []
+
+        // What's driving the score: name the standout improvement and concern.
+        let improved = report.metrics.filter { $0.trend == .better }
+        let worsened = report.metrics.filter { $0.trend == .worse }
+        if let win = improved.first, let loss = worsened.first {
+            parts.append("Your \(win.title.lowercased()) improved, but \(loss.title.lowercased()) moved the wrong way — so your body is recovered, just not fully topped up.")
+        } else if !improved.isEmpty {
+            let names = improved.map { $0.title.lowercased() }.joined(separator: " and ")
+            parts.append("Good signs across the board — \(names) all improved versus yesterday.")
+        } else if !worsened.isEmpty {
+            let names = worsened.map { $0.title.lowercased() }.joined(separator: " and ")
+            parts.append("A few signals slipped — \(names) came in below yesterday, which usually means incomplete recovery.")
         } else {
-            lines.append("**\(report.headline)**")
+            parts.append("Your overnight signals held steady versus yesterday.")
         }
 
-        for m in report.metrics {
-            let dir: String
-            switch m.trend {
-            case .better: dir = "up"
-            case .worse: dir = "down"
-            case .flat: dir = "steady"
-            case .unknown: dir = "—"
-            }
-            if let d = m.deltaText, let y = m.yesterdayText, m.trend != .unknown {
-                lines.append("\(m.title): \(m.todayText) (\(d) vs \(y), \(dir)).")
-            } else {
-                lines.append("\(m.title): \(m.todayText).")
-            }
-        }
-
-        // A light, non-prescriptive nudge based on the score.
         if let s = report.score {
             switch s {
-            case 80...: lines.append("You look ready — a good day to push if you want to.")
-            case 60..<80: lines.append("A balanced day looks right — train as planned, listen to your body.")
-            case 40..<60: lines.append("Maybe keep intensity moderate and prioritise sleep tonight.")
-            default: lines.append("Your body's asking for recovery — favour rest, hydration, and an early night.")
+            case 80...: parts.append("You look ready — a good day to push if you want to.")
+            case 60..<80: parts.append("Train as planned, just listen to your body.")
+            case 40..<60: parts.append("Keep intensity moderate today and prioritise sleep tonight.")
+            default: parts.append("Favour rest, hydration, and an early night.")
             }
         }
 
-        return lines.joined(separator: "\n\n")
+        return parts.joined(separator: " ")
     }
 }

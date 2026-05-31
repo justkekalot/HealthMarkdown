@@ -34,7 +34,7 @@ struct RecoveryView: View {
                 }
                 .scrollIndicators(.hidden)
             }
-            .navigationTitle("Morning Readiness")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.hidden, for: .navigationBar)
             .task { await load() }
             .refreshable { await load() }
@@ -54,9 +54,9 @@ struct RecoveryView: View {
     private var greeting: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(greetingText)
-                .font(.system(size: 30, weight: .bold, design: .serif))
+                .font(.system(size: 32, weight: .bold, design: .serif))
                 .foregroundStyle(Theme.textPrimary)
-            Text("Here's how your body recovered overnight.")
+            Text(Fmt.shortDate(Date()) + " · recovered overnight")
                 .font(.subheadline)
                 .foregroundStyle(Theme.textSecondary)
         }
