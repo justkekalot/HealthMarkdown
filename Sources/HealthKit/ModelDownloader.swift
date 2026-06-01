@@ -9,14 +9,15 @@ final class ModelDownloader: NSObject, URLSessionDownloadDelegate {
     private let token: String
     private let destination: URL
     private let onProgress: (Double) -> Void
-    private let onFinish: (Result<Void, String>) -> Void
+    /// Called once on completion: nil = success, non-nil = error message.
+    private let onFinish: (String?) -> Void
 
     private var session: URLSession?
     private var task: URLSessionDownloadTask?
 
     init(url: URL, token: String, destination: URL,
          onProgress: @escaping (Double) -> Void,
-         onFinish: @escaping (Result<Void, String>) -> Void) {
+         onFinish: @escaping (String?) -> Void) {
         self.url = url
         self.token = token
         self.destination = destination
@@ -59,16 +60,16 @@ final class ModelDownloader: NSObject, URLSessionDownloadDelegate {
             let msg = (http.statusCode == 401 || http.statusCode == 403)
                 ? "Access denied (\(http.statusCode)). Check your token and that you accepted the Gemma license on Hugging Face."
                 : "Download failed (HTTP \(http.statusCode))."
-            onFinish(.failure(msg))
+            onFinish(msg)
             return
         }
         do {
             let fm = FileManager.default
             try? fm.removeItem(at: destination)
             try fm.moveItem(at: location, to: destination)
-            onFinish(.success(()))
+            onFinish(nil)
         } catch {
-            onFinish(.failure("Couldn't save the model: \(error.localizedDescription)"))
+            onFinish("Couldn't save the model: \(error.localizedDescription)")
         }
         session.finishTasksAndInvalidate()
     }
@@ -76,7 +77,7 @@ final class ModelDownloader: NSObject, URLSessionDownloadDelegate {
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         if let error = error as NSError? {
             if error.code == NSURLErrorCancelled { return } // user cancelled
-            onFinish(.failure("Download failed: \(error.localizedDescription)"))
+            onFinish("Download failed: \(error.localizedDescription)")
         }
     }
 }

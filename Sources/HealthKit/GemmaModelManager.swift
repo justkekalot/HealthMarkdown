@@ -89,15 +89,10 @@ final class GemmaModelManager: ObservableObject {
             onProgress: { [weak self] p in
                 Task { @MainActor in self?.state = .downloading(progress: p) }
             },
-            onFinish: { [weak self] result in
+            onFinish: { [weak self] errorMessage in
                 Task { @MainActor in
                     guard let self else { return }
-                    switch result {
-                    case .success:
-                        self.state = .ready
-                    case .failure(let err):
-                        self.state = .failed(err)
-                    }
+                    self.state = errorMessage.map { .failed($0) } ?? .ready
                     self.downloader = nil
                 }
             }
