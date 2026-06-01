@@ -36,7 +36,7 @@ final class GemmaModelManager: ObservableObject {
     @Published var selectedVariant: Variant = .e2b
 
     private let fm = FileManager.default
-    private var downloadTask: Task<Void, Never>?
+    private var downloader: ModelDownloader?
     private let tokenKey = "hfToken"
 
     /// Hugging Face access token (Gemma repos are license-gated). Stored on
@@ -71,7 +71,9 @@ final class GemmaModelManager: ObservableObject {
     }
 
     /// Begin downloading the selected variant from Hugging Face using the saved
-    /// token (the Gemma repos are license-gated).
+    /// token (the Gemma repos are license-gated). Uses a URLSessionDownloadTask
+    /// (native chunked streaming to disk + real progress) — NOT a byte-by-byte
+    /// async loop, which was glacially slow for multi-GB files.
     func download() {
         guard !isReady else { return }
         guard hasToken else {
@@ -79,71 +81,39 @@ final class GemmaModelManager: ObservableObject {
             return
         }
         state = .downloading(progress: 0)
-        downloadTask?.cancel()
-        let variant = selectedVariant
-        let token = hfToken
-        downloadTask = Task { await runDownload(url: variant.downloadURL, token: token) }
+        let dest = modelURL(for: selectedVariant)
+        downloader = ModelDownloader(
+            url: selectedVariant.downloadURL,
+            token: hfToken,
+            destination: dest,
+            onProgress: { [weak self] p in
+                Task { @MainActor in self?.state = .downloading(progress: p) }
+            },
+            onFinish: { [weak self] result in
+                Task { @MainActor in
+                    guard let self else { return }
+                    switch result {
+                    case .success:
+                        self.state = .ready
+                    case .failure(let err):
+                        self.state = .failed(err)
+                    }
+                    self.downloader = nil
+                }
+            }
+        )
+        downloader?.start()
     }
 
     func cancel() {
-        downloadTask?.cancel()
+        downloader?.cancel()
+        downloader = nil
         refreshState()
     }
 
     func delete() {
         try? fm.removeItem(at: modelURL(for: selectedVariant))
         refreshState()
-    }
-
-    private func runDownload(url: URL, token: String) async {
-        let dest = modelURL(for: selectedVariant)
-        let tmp = dest.appendingPathExtension("part")
-        do {
-            var request = URLRequest(url: url)
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-            let (bytes, response) = try await URLSession.shared.bytes(for: request)
-
-            if let http = response as? HTTPURLResponse, http.statusCode != 200 {
-                state = .failed(http.statusCode == 401 || http.statusCode == 403
-                    ? "Access denied (\(http.statusCode)). Check your token and that you've accepted the Gemma license on Hugging Face."
-                    : "Download failed (HTTP \(http.statusCode)).")
-                return
-            }
-
-            let total = response.expectedContentLength
-            // Stream to a file handle (multi-GB — never hold it all in memory).
-            fm.createFile(atPath: tmp.path, contents: nil)
-            let handle = try FileHandle(forWritingTo: tmp)
-            defer { try? handle.close() }
-
-            var received: Int64 = 0
-            var buffer = Data()
-            buffer.reserveCapacity(1 << 20)
-            var lastReported = 0.0
-            for try await byte in bytes {
-                buffer.append(byte)
-                received += 1
-                if buffer.count >= (1 << 20) {
-                    try handle.write(contentsOf: buffer)
-                    buffer.removeAll(keepingCapacity: true)
-                    if total > 0 {
-                        let p = Double(received) / Double(total)
-                        if p - lastReported >= 0.005 { lastReported = p; state = .downloading(progress: p) }
-                    }
-                }
-            }
-            if !buffer.isEmpty { try handle.write(contentsOf: buffer) }
-            try handle.close()
-            try? fm.removeItem(at: dest)
-            try fm.moveItem(at: tmp, to: dest)
-            state = .ready
-        } catch is CancellationError {
-            try? fm.removeItem(at: tmp)
-            refreshState()
-        } catch {
-            try? fm.removeItem(at: tmp)
-            state = .failed("Download failed: \(error.localizedDescription)")
-        }
     }
 
     /// A ready engine for the downloaded model, or nil if not downloaded.

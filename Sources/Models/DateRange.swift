@@ -4,6 +4,7 @@ import Foundation
 enum DateRangeOption: String, CaseIterable, Identifiable {
     case last24Hours
     case yesterday
+    case last3Days
     case last7Days
     case last30Days
     case last90Days
@@ -17,6 +18,7 @@ enum DateRangeOption: String, CaseIterable, Identifiable {
         switch self {
         case .last24Hours: return "24 hours"
         case .yesterday: return "Yesterday"
+        case .last3Days: return "3 days"
         case .last7Days: return "7 days"
         case .last30Days: return "30 days"
         case .last90Days: return "90 days"
@@ -30,6 +32,7 @@ enum DateRangeOption: String, CaseIterable, Identifiable {
         switch self {
         case .last24Hours: return "The last 24 hours"
         case .yesterday: return "The full previous calendar day"
+        case .last3Days: return "The last three days"
         case .last7Days: return "This week at a glance"
         case .last30Days: return "A month of trends"
         case .last90Days: return "A quarter of data"
@@ -54,6 +57,8 @@ enum DateRangeOption: String, CaseIterable, Identifiable {
             let startOfToday = calendar.startOfDay(for: end)
             let startOfYesterday = calendar.date(byAdding: .day, value: -1, to: startOfToday) ?? startOfToday
             return DateInterval(start: startOfYesterday, end: startOfToday)
+        case .last3Days:
+            return DateInterval(start: calendar.date(byAdding: .day, value: -3, to: end) ?? end, end: end)
         case .last7Days:
             return DateInterval(start: calendar.date(byAdding: .day, value: -7, to: end) ?? end, end: end)
         case .last30Days:
