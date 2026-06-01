@@ -19,7 +19,7 @@ struct AskView: View {
         "Can I push for a PR?",
     ]
 
-    private var engine: LLMEngine { BuiltInEngine() }
+    private var engine: LLMEngine { gemma.makeEngine() ?? BuiltInEngine() }
 
     var body: some View {
         NavigationStack {

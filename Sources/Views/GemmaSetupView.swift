@@ -12,7 +12,7 @@ struct GemmaSetupView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 22) {
                         intro
-                        if gemma.isReady { readyCard } else { variantPicker; statusArea }
+                        if gemma.isReady { readyCard } else { variantPicker; tokenField; statusArea }
                         privacyNote
                     }
                     .padding(20)
@@ -68,6 +68,20 @@ struct GemmaSetupView: View {
         }
     }
 
+    private var tokenField: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("HUGGING FACE TOKEN")
+                .font(.caption.weight(.semibold)).foregroundStyle(Theme.textSecondary).tracking(1.2)
+            SecureField("hf_…", text: Binding(get: { gemma.hfToken }, set: { gemma.hfToken = $0 }))
+                .textFieldStyle(.plain)
+                .padding(.vertical, 12).padding(.horizontal, 14)
+                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.surface))
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Theme.cardStroke, lineWidth: 1))
+            Text("Gemma is license-gated. Create a free read token at huggingface.co/settings/tokens and accept the Gemma license once. The token stays on your device.")
+                .font(.caption2).foregroundStyle(Theme.textSecondary).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
     @ViewBuilder
     private var statusArea: some View {
         switch gemma.state {
@@ -102,11 +116,15 @@ struct GemmaSetupView: View {
     private var downloadButton: some View {
         Button { gemma.download() } label: {
             HStack {
-                Image(systemName: "arrow.down.circle.fill")
-                Text("Download \(gemma.selectedVariant.title) · \(gemma.selectedVariant.sizeText)")
+                Image(systemName: gemma.hasToken ? "arrow.down.circle.fill" : "key.fill")
+                Text(gemma.hasToken
+                     ? "Download \(gemma.selectedVariant.title) · \(gemma.selectedVariant.sizeText)"
+                     : "Add a token to download")
             }
         }
         .buttonStyle(PrimaryButtonStyle())
+        .disabled(!gemma.hasToken)
+        .opacity(gemma.hasToken ? 1 : 0.6)
     }
 
     private var readyCard: some View {

@@ -16,10 +16,18 @@ settings:
     GENERATE_INFOPLIST_FILE: NO
     ENABLE_USER_SCRIPT_SANDBOXING: YES
 
+packages:
+  SwiftTasksGenAI:
+    url: https://github.com/paescebu/SwiftTasksGenAI
+    exactVersion: 0.10.24
+
 targets:
   HealthMarkdown:
     type: application
     platform: iOS
+    dependencies:
+      - package: SwiftTasksGenAI
+        product: SwiftTasksGenAI
     sources:
       - path: Sources
       - path: HealthMarkdown.storekit
@@ -45,6 +53,10 @@ targets:
       properties:
         com.apple.developer.healthkit: true
         com.apple.developer.healthkit.access: []
+        # NOTE: increased-memory-limit / extended-virtual-addressing entitlements
+        # require a PAID Apple Developer account (free personal teams reject them).
+        # Without them, large models may be jetsam-killed; E2B is the safest bet.
+        # Re-add these once on a paid team for reliable large-model loading.
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.escrime.healthmarkdown

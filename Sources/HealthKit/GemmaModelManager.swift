@@ -13,11 +13,15 @@ final class GemmaModelManager: ObservableObject {
         case e2b, e4b
         var id: String { rawValue }
         var title: String { self == .e2b ? "Gemma 3n E2B" : "Gemma 3n E4B" }
-        var sizeText: String { self == .e2b ? "≈ 1.5 GB" : "≈ 4.4 GB" }
+        var sizeText: String { self == .e2b ? "≈ 3.1 GB" : "≈ 4.4 GB" }
         var blurb: String {
             self == .e2b
-            ? "Smaller & faster. Good answers, lighter on storage and battery."
-            : "Larger & sharper. Best answers, needs more space and a bit more time per reply."
+            ? "Recommended. Runs reliably on-device — good answers, fits in memory."
+            : "Experimental. Sharper answers, but ~4.4 GB may hit iOS memory limits and crash on some devices."
+        }
+        /// Hugging Face download URL for the MediaPipe .task (int4) file.
+        var downloadURL: URL {
+            URL(string: "https://huggingface.co/google/gemma-3n-\(self == .e2b ? "E2B" : "E4B")-it-litert-preview/resolve/main/gemma-3n-\(self == .e2b ? "E2B" : "E4B")-it-int4.task")!
         }
     }
 
@@ -29,10 +33,19 @@ final class GemmaModelManager: ObservableObject {
     }
 
     @Published private(set) var state: State = .notDownloaded
-    @Published var selectedVariant: Variant = .e4b
+    @Published var selectedVariant: Variant = .e2b
 
     private let fm = FileManager.default
     private var downloadTask: Task<Void, Never>?
+    private let tokenKey = "hfToken"
+
+    /// Hugging Face access token (Gemma repos are license-gated). Stored on
+    /// device only; never committed or transmitted anywhere but Hugging Face.
+    var hfToken: String {
+        get { UserDefaults.standard.string(forKey: tokenKey) ?? "" }
+        set { UserDefaults.standard.set(newValue, forKey: tokenKey); objectWillChange.send() }
+    }
+    var hasToken: Bool { !hfToken.trimmingCharacters(in: .whitespaces).isEmpty }
 
     private var dir: URL {
         let base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -57,15 +70,19 @@ final class GemmaModelManager: ObservableObject {
         }
     }
 
-    /// Begin (or resume) downloading the selected variant.
-    /// NOTE: the production model URL is configured at integration time (Hugging
-    /// Face / your CDN, with the appropriate Gemma licence acceptance). The
-    /// download/progress/cancel/persist plumbing here is real and final.
-    func download(from url: URL? = nil) {
+    /// Begin downloading the selected variant from Hugging Face using the saved
+    /// token (the Gemma repos are license-gated).
+    func download() {
         guard !isReady else { return }
+        guard hasToken else {
+            state = .failed("Add your Hugging Face token first (the Gemma model is license-gated).")
+            return
+        }
         state = .downloading(progress: 0)
         downloadTask?.cancel()
-        downloadTask = Task { await runDownload(url: url) }
+        let variant = selectedVariant
+        let token = hfToken
+        downloadTask = Task { await runDownload(url: variant.downloadURL, token: token) }
     }
 
     func cancel() {
@@ -78,32 +95,60 @@ final class GemmaModelManager: ObservableObject {
         refreshState()
     }
 
-    private func runDownload(url: URL?) async {
-        guard let url else {
-            // No source configured yet — surface an honest, actionable message
-            // instead of pretending to download.
-            state = .failed("Model source isn't configured in this build yet. The download flow is ready; the Gemma file URL gets set when on-device inference is wired in.")
-            return
-        }
+    private func runDownload(url: URL, token: String) async {
+        let dest = modelURL(for: selectedVariant)
+        let tmp = dest.appendingPathExtension("part")
         do {
-            let (bytes, response) = try await URLSession.shared.bytes(from: url)
+            var request = URLRequest(url: url)
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            let (bytes, response) = try await URLSession.shared.bytes(for: request)
+
+            if let http = response as? HTTPURLResponse, http.statusCode != 200 {
+                state = .failed(http.statusCode == 401 || http.statusCode == 403
+                    ? "Access denied (\(http.statusCode)). Check your token and that you've accepted the Gemma license on Hugging Face."
+                    : "Download failed (HTTP \(http.statusCode)).")
+                return
+            }
+
             let total = response.expectedContentLength
+            // Stream to a file handle (multi-GB — never hold it all in memory).
+            fm.createFile(atPath: tmp.path, contents: nil)
+            let handle = try FileHandle(forWritingTo: tmp)
+            defer { try? handle.close() }
+
             var received: Int64 = 0
-            var data = Data()
-            data.reserveCapacity(total > 0 ? Int(total) : 1_000_000)
+            var buffer = Data()
+            buffer.reserveCapacity(1 << 20)
+            var lastReported = 0.0
             for try await byte in bytes {
-                data.append(byte)
+                buffer.append(byte)
                 received += 1
-                if total > 0, received % 1_000_000 == 0 {
-                    state = .downloading(progress: Double(received) / Double(total))
+                if buffer.count >= (1 << 20) {
+                    try handle.write(contentsOf: buffer)
+                    buffer.removeAll(keepingCapacity: true)
+                    if total > 0 {
+                        let p = Double(received) / Double(total)
+                        if p - lastReported >= 0.005 { lastReported = p; state = .downloading(progress: p) }
+                    }
                 }
             }
-            try data.write(to: modelURL(for: selectedVariant), options: .atomic)
+            if !buffer.isEmpty { try handle.write(contentsOf: buffer) }
+            try handle.close()
+            try? fm.removeItem(at: dest)
+            try fm.moveItem(at: tmp, to: dest)
             state = .ready
         } catch is CancellationError {
+            try? fm.removeItem(at: tmp)
             refreshState()
         } catch {
+            try? fm.removeItem(at: tmp)
             state = .failed("Download failed: \(error.localizedDescription)")
         }
+    }
+
+    /// A ready engine for the downloaded model, or nil if not downloaded.
+    func makeEngine() -> LLMEngine? {
+        guard isReady else { return nil }
+        return GemmaEngine(modelPath: modelURL(for: selectedVariant).path, displayName: selectedVariant.title)
     }
 }
