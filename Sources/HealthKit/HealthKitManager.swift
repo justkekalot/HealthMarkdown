@@ -79,8 +79,8 @@ final class HealthKitManager: ObservableObject {
         var report = HealthReport(generatedAt: Date(), range: range, mode: mode, interval: interval)
 
         let predicate = HKQuery.predicateForSamples(withStart: interval.start, end: interval.end, options: .strictStartDate)
-        // Full mode runs an extra raw pass over every quantity and category.
-        let extraRawWork = mode == .full ? HealthCatalog.quantities.count + HealthCatalog.categories.count : 0
+        // Full and Raw modes run an extra raw pass over every quantity and category.
+        let extraRawWork = mode.includesRaw ? HealthCatalog.quantities.count + HealthCatalog.categories.count : 0
         let totalSteps = HealthCatalog.quantities.count + 4 + extraRawWork
         var step = 0
 
@@ -115,10 +115,10 @@ final class HealthKitManager: ObservableObject {
         advance("Workouts")
         report.workouts = await fetchWorkouts(predicate: predicate)
 
-        // Full export: every raw sample for every metric that has data —
+        // Full & Raw exports: every raw sample for every metric that has data —
         // quantities AND category types (sleep, mindfulness), so weight, heart
         // rate, HRV and sleep all get a real time series, not just a summary.
-        if mode == .full {
+        if mode.includesRaw {
             for spec in HealthCatalog.quantities {
                 advance("\(spec.title) (raw)")
                 if let series = await fetchRawSeries(spec: spec, interval: interval), series.hasData {

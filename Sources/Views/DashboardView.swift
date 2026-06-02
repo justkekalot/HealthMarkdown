@@ -77,70 +77,63 @@ struct DashboardView: View {
         }
     }
 
-    // MARK: - Step 1: mode (two side-by-side cards)
+    // MARK: - Step 1: mode (vertical list of rows — scales to 3 modes)
 
     private var modeSelector: some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 12) {
-                ForEach(ExportMode.allCases) { mode in
-                    modeCard(mode)
-                }
+        VStack(spacing: 10) {
+            ForEach(ExportMode.allCases) { mode in
+                modeRow(mode)
             }
-            // Explanation for the currently-selected mode, below the cards.
-            HStack(spacing: 8) {
-                Image(systemName: "info.circle")
-                    .font(.caption)
-                    .foregroundStyle(Theme.textSecondary)
-                Text(selectedMode.subtitle)
-                    .font(.footnote)
-                    .foregroundStyle(Theme.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Spacer()
-            }
-            .padding(.horizontal, 4)
-            .transition(.opacity)
-            .id(selectedMode)
         }
     }
 
-    private func modeCard(_ mode: ExportMode) -> some View {
+    private func modeRow(_ mode: ExportMode) -> some View {
         let selected = selectedMode == mode
+        let locked = !purchases.isUnlocked && !PurchaseManager.isFreeCombo(mode: mode, range: selectedRange)
         return Button {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                 selectedMode = mode
                 invalidateResult()
             }
         } label: {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 11, style: .continuous)
-                            .fill(selected ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(Theme.control))
-                            .frame(width: 38, height: 38)
-                        Image(systemName: mode.symbol)
-                            .font(.system(size: 17, weight: .semibold))
-                            .foregroundStyle(selected ? Color.white : Theme.accent)
-                    }
-                    Spacer()
-                    Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                        .font(.system(size: 20))
-                        .foregroundStyle(selected ? Theme.accent : Theme.textSecondary.opacity(0.5))
+            HStack(spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .fill(selected ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(Theme.control))
+                        .frame(width: 40, height: 40)
+                    Image(systemName: mode.symbol)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(selected ? Color.white : Theme.accent)
                 }
-                Text(mode.title)
-                    .font(.title3.weight(.bold))
-                    .foregroundStyle(Theme.textPrimary)
-                Text(mode.shortTag)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(Theme.textSecondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(mode.title)
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(Theme.textPrimary)
+                        if locked {
+                            Image(systemName: "lock.fill")
+                                .font(.caption2)
+                                .foregroundStyle(Theme.textSecondary)
+                        }
+                    }
+                    Text(mode.subtitle)
+                        .font(.footnote)
+                        .foregroundStyle(Theme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 20))
+                    .foregroundStyle(selected ? Theme.accent : Theme.textSecondary.opacity(0.4))
             }
-            .padding(16)
+            .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .fill(selected ? Theme.subtleGradient : LinearGradient(colors: [Theme.card], startPoint: .top, endPoint: .bottom))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .stroke(selected ? Theme.accent.opacity(0.6) : Theme.cardStroke, lineWidth: 1)
             )
         }

@@ -91,7 +91,7 @@ struct PreviewView: View {
                         .multilineTextAlignment(.center)
 
                     HStack(spacing: 18) {
-                        if report.mode == .full {
+                        if report.mode.includesRaw {
                             statPill("\(report.rawSampleCount)", "raw samples")
                             statPill("\(report.rawSeries.count + report.rawCategorySeries.count)", "metrics")
                         } else {

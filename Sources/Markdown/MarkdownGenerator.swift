@@ -15,22 +15,26 @@ enum MarkdownGenerator {
         md += header(report)
         md += summaryBlock(report)
 
-        for section in report.sectionsWithData {
-            switch section {
-            case .profile:
-                md += profileSection(report.profile)
-            case .sleep:
-                md += sleepSection(report.sleep)
-            case .mindfulness:
-                md += mindfulSection(report.mindful)
-            case .workouts:
-                md += workoutsSection(report.workouts)
-            default:
-                md += quantitySection(section, report: report)
+        // Aggregated summary sections (Quick & Full only — Raw skips them).
+        if report.mode.includesSummary {
+            for section in report.sectionsWithData {
+                switch section {
+                case .profile:
+                    md += profileSection(report.profile)
+                case .sleep:
+                    md += sleepSection(report.sleep)
+                case .mindfulness:
+                    md += mindfulSection(report.mindful)
+                case .workouts:
+                    md += workoutsSection(report.workouts)
+                default:
+                    md += quantitySection(section, report: report)
+                }
             }
         }
 
-        if report.mode == .full && (!report.rawSeries.isEmpty || !report.rawCategorySeries.isEmpty) {
+        // Raw per-sample dump (Full & Raw).
+        if report.mode.includesRaw && (!report.rawSeries.isEmpty || !report.rawCategorySeries.isEmpty) {
             md += rawDumpSection(report)
         }
 
@@ -46,10 +50,14 @@ enum MarkdownGenerator {
         s += "| | |\n|---|---|\n"
         s += "| **Generated** | \(Fmt.dateTime(report.generatedAt)) |\n"
         s += "| **Window** | \(report.range.title) (\(Fmt.shortDate(report.interval.start)) → \(Fmt.shortDate(report.interval.end))) |\n"
-        if report.mode == .full {
+        switch report.mode {
+        case .full:
             s += "| **Export** | Full — aggregated summary **plus every raw sample** |\n"
             s += "| **Raw samples** | \(report.rawSampleCount) |\n"
-        } else {
+        case .raw:
+            s += "| **Export** | Raw — every raw sample, no aggregation |\n"
+            s += "| **Raw samples** | \(report.rawSampleCount) |\n"
+        case .quick:
             s += "| **Export** | Quick — aggregated summary |\n"
         }
         s += "| **Sections** | \(report.sectionsWithData.map(\.title).joined(separator: ", ")) |\n\n"
@@ -58,17 +66,24 @@ enum MarkdownGenerator {
 
     private static func summaryBlock(_ report: HealthReport) -> String {
         var s = "## How to read this\n\n"
-        if report.mode == .full {
+        switch report.mode {
+        case .full:
             s += "This is a **full export**. It has two parts:\n\n"
             s += "1. **Summary** (below) — aggregated totals/averages per metric, for a quick overview.\n"
             s += "2. **Raw Samples** (at the end) — every individual measurement exactly as recorded in Apple Health, "
             s += "with its precise timestamp, value, and source. Nothing is bucketed or averaged there.\n\n"
-        } else {
+            s += "- Cumulative metrics report a **total** and **daily average**; point-in-time metrics report **average / min / max** and the **latest** reading.\n"
+            s += "- Empty or unmeasured metrics are omitted entirely.\n\n"
+        case .raw:
+            s += "This is a **raw export** — no aggregation at all. Every section below is the "
+            s += "**Raw Samples** dump: one table per metric, one row per individual measurement, "
+            s += "with its exact timestamp, value, and source, straight from Apple Health.\n\n"
+        case .quick:
             s += "This is a **quick export** — aggregated values only:\n\n"
+            s += "- Cumulative metrics (steps, energy, distance, nutrition) report the **total** and a **daily average** over the window.\n"
+            s += "- Point-in-time metrics (heart rate, weight, blood oxygen) report **average / min / max** and the **latest** reading.\n"
+            s += "- Empty or unmeasured metrics are omitted entirely.\n\n"
         }
-        s += "- Cumulative metrics (steps, energy, distance, nutrition) report the **total** and a **daily average** over the window.\n"
-        s += "- Point-in-time metrics (heart rate, weight, blood oxygen) report **average / min / max** and the **latest** reading.\n"
-        s += "- Empty or unmeasured metrics are omitted entirely.\n\n"
         s += "---\n\n"
         return s
     }
