@@ -37,8 +37,15 @@ actor GemmaEngine: LLMEngine {
             guard let engine else { return "The model isn't loaded." }
             let conversation = try await engine.createConversation()
             let prompt = Self.buildPrompt(question: question, context: context)
-            let reply = try await conversation.sendMessage(Message(prompt))
-            let text = reply.toString.trimmingCharacters(in: .whitespacesAndNewlines)
+            // Use the streaming API — the one-shot sendMessage returns null in
+            // the LiteRT-LM preview; the official sample streams and accumulates.
+            var text = ""
+            for try await chunk in conversation.sendMessageStream(Message(prompt)) {
+                for content in chunk.contents {
+                    if case let .text(t) = content { text += t }
+                }
+            }
+            text = text.trimmingCharacters(in: .whitespacesAndNewlines)
             return text.isEmpty ? "Gemma returned an empty answer — try rephrasing." : text
         } catch {
             return "Gemma couldn't answer this time (\(error.localizedDescription)). The built-in engine still works."
