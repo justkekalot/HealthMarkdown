@@ -18,6 +18,9 @@ struct AskView: View {
     @State private var question = ""
     @State private var thinking = false
     @State private var showGemmaSheet = false
+    /// Held for the whole chat so the Gemma conversation (and its memory)
+    /// persists across turns instead of resetting every message.
+    @State private var sessionEngine: LLMEngine?
 
     private let suggestions = [
         "Am I ready for a marathon today?",
@@ -26,7 +29,12 @@ struct AskView: View {
         "Can I push for a PR?",
     ]
 
-    private var engine: LLMEngine { gemma.makeEngine() ?? BuiltInEngine() }
+    private func engineForSession() -> LLMEngine {
+        if let e = sessionEngine { return e }
+        let e = gemma.makeEngine() ?? BuiltInEngine()
+        sessionEngine = e
+        return e
+    }
 
     var body: some View {
         NavigationStack {
@@ -195,7 +203,7 @@ struct AskView: View {
         messages.append(ChatMessage(role: .user, text: q))
         thinking = true
         Haptics.tap()
-        let eng = engine
+        let eng = engineForSession()
         Task {
             let id = await MainActor.run { () -> UUID in
                 let m = ChatMessage(role: .assistant, text: "")

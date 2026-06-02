@@ -12,6 +12,9 @@ actor GemmaEngine: LLMEngine {
 
     private let modelPath: String
     private var engine: Engine?
+    /// One persistent conversation per engine instance → the model keeps chat
+    /// history. The view holds one engine for the whole chat session.
+    private var conversation: Conversation?
 
     init(modelPath: String, displayName: String) {
         self.modelPath = modelPath
@@ -38,30 +41,38 @@ actor GemmaEngine: LLMEngine {
     }
 
     func answer(question: String, context: RecoveryReport) async -> String {
-        await stream(prompt: Self.buildPrompt(question: question, context: context), onToken: { _ in })
+        await ask(question: question, systemContext: Self.recoverySystem(context: context), onToken: { _ in })
     }
 
     func answerAboutDocument(question: String, document: String) async -> String {
-        await stream(prompt: Self.buildDocumentPrompt(question: question, document: document), onToken: { _ in })
+        await ask(question: question, systemContext: Self.documentSystem(document: document), onToken: { _ in })
     }
 
     func answerStreaming(question: String, context: RecoveryReport, onToken: @escaping @Sendable (String) -> Void) async -> String {
-        await stream(prompt: Self.buildPrompt(question: question, context: context), onToken: onToken)
+        await ask(question: question, systemContext: Self.recoverySystem(context: context), onToken: onToken)
     }
 
     func answerAboutDocumentStreaming(question: String, document: String, onToken: @escaping @Sendable (String) -> Void) async -> String {
-        await stream(prompt: Self.buildDocumentPrompt(question: question, document: document), onToken: onToken)
+        await ask(question: question, systemContext: Self.documentSystem(document: document), onToken: onToken)
     }
 
-    /// Shared streaming core — emits each chunk live via onToken; the one-shot
-    /// sendMessage returns null in the LiteRT-LM preview, so we always stream.
-    private func stream(prompt: String, onToken: @escaping @Sendable (String) -> Void) async -> String {
+    /// Reuse one conversation across turns (chat memory). The system context is
+    /// set once when the conversation is created; each turn sends just the
+    /// user's question. A non-zero temperature gives varied, non-robotic replies.
+    private func ask(question: String, systemContext: String, onToken: @escaping @Sendable (String) -> Void) async -> String {
         do {
             try await ensureLoaded()
             guard let engine else { return "The model isn't loaded." }
-            let conversation = try await engine.createConversation()
+            if conversation == nil {
+                let config = ConversationConfig(
+                    systemMessage: Message(systemContext, role: .system),
+                    samplerConfig: try SamplerConfig(topK: 64, topP: 0.95, temperature: 1.0, seed: Int.random(in: 1...1_000_000))
+                )
+                conversation = try await engine.createConversation(with: config)
+            }
+            guard let conversation else { return "The model isn't ready." }
             var text = ""
-            for try await chunk in conversation.sendMessageStream(Message(prompt)) {
+            for try await chunk in conversation.sendMessageStream(Message(question)) {
                 for content in chunk.contents {
                     if case let .text(t) = content { text += t; onToken(t) }
                 }
@@ -73,28 +84,24 @@ actor GemmaEngine: LLMEngine {
         }
     }
 
-    /// Prompt for questions about an exported document. The document is already
-    /// truncated by the caller to fit the model's context window.
-    static func buildDocumentPrompt(question: String, document: String) -> String {
+    /// System context for the export chat — set once per conversation; the data
+    /// is already truncated by the caller to fit the context window.
+    static func documentSystem(document: String) -> String {
         """
-        You are a concise health-data analyst. Below is an export of the user's \
-        Apple Health data in Markdown. Answer the question using ONLY this data. \
-        Point out trends, notable values, and changes over time where relevant. \
-        Keep it under 120 words. This is wellness insight, not medical advice — never diagnose.
+        You are a concise health-data analyst inside an app. The user's Apple Health \
+        export (Markdown) is below. Answer questions using ONLY this data — point out \
+        trends, notable values, and changes over time. Keep answers under 120 words and \
+        don't repeat the whole context each time. This is wellness insight, not medical \
+        advice — never diagnose. Remember earlier turns in the conversation.
 
         --- EXPORT START ---
         \(document)
         --- EXPORT END ---
-
-        Question: "\(question)"
-
-        Answer:
         """
     }
 
-    /// Compose a grounded prompt: give Gemma the recovery facts + the question,
-    /// and constrain it to a short, wellness-framed (non-medical) answer.
-    static func buildPrompt(question: String, context: RecoveryReport) -> String {
+    /// System context for the readiness chat — set once per conversation.
+    static func recoverySystem(context: RecoveryReport) -> String {
         var facts = "Recovery score: \(context.score.map(String.init) ?? "unknown")/100 (\(context.headline)).\n"
         for m in context.metrics {
             let dir = m.trend == .better ? "up" : m.trend == .worse ? "down" : "flat"
@@ -103,14 +110,13 @@ actor GemmaEngine: LLMEngine {
         }
         return """
         You are a concise, friendly fitness-recovery assistant inside a health app. \
-        Use ONLY the data below to answer. Keep it under 90 words. Be encouraging but honest. \
-        This is wellness guidance, not medical advice — never diagnose.
+        Use the user's data below to answer their questions. Keep answers under 90 words, \
+        be encouraging but honest, and don't restate the full recovery numbers every time — \
+        the user can see them. This is wellness guidance, not medical advice — never diagnose. \
+        Remember earlier turns in this conversation.
 
         This morning's data:
         \(facts)
-        User question: "\(question)"
-
-        Answer:
         """
     }
 }

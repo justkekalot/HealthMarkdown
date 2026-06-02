@@ -10,6 +10,8 @@ struct ExportChatView: View {
     @State private var messages: [AskView.ChatMessage] = []
     @State private var question = ""
     @State private var thinking = false
+    /// Held for the session so the Gemma conversation keeps its memory.
+    @State private var sessionEngine: LLMEngine?
 
     /// Models have a bounded context window; a Full/Raw export can be MBs. Cap
     /// the document (~9k chars ≈ 2.5k tokens, leaving room for the prompt + a
@@ -157,7 +159,8 @@ struct ExportChatView: View {
         messages.append(.init(role: .user, text: q))
         thinking = true
         Haptics.tap()
-        let engine: LLMEngine = gemma.makeEngine() ?? BuiltInEngine()
+        if sessionEngine == nil { sessionEngine = gemma.makeEngine() ?? BuiltInEngine() }
+        let engine = sessionEngine!
         let doc = documentForModel
         Task {
             let id = await MainActor.run { () -> UUID in
