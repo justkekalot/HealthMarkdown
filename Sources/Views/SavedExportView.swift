@@ -10,6 +10,7 @@ struct SavedExportView: View {
     @State private var loading = true
     @State private var copied = false
     @State private var showShare = false
+    @State private var showChat = false
 
     /// Mirror PreviewView: above this size, skip rendering the raw text.
     private var isLarge: Bool { markdown.utf8.count > 60_000 }
@@ -54,6 +55,13 @@ struct SavedExportView: View {
                     Button("Done") { dismiss() }.foregroundStyle(Theme.textPrimary)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
+                    Button { showChat = true } label: {
+                        Image(systemName: "bubble.left.and.text.bubble.right.fill")
+                    }
+                    .tint(Theme.accent)
+                    .disabled(loading)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
                     Button(role: .destructive) {
                         exports.delete(record)
                         dismiss()
@@ -74,6 +82,9 @@ struct SavedExportView: View {
             }
             .sheet(isPresented: $showShare) {
                 ShareSheet(items: [exports.fileURL(for: record)])
+            }
+            .sheet(isPresented: $showChat) {
+                ExportChatView(title: "\(record.mode.title) · \(record.rangeTitle)", markdown: markdown)
             }
         }
     }

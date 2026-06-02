@@ -55,6 +55,44 @@ actor GemmaEngine: LLMEngine {
         }
     }
 
+    func answerAboutDocument(question: String, document: String) async -> String {
+        do {
+            try await ensureLoaded()
+            guard let engine else { return "The model isn't loaded." }
+            let conversation = try await engine.createConversation()
+            let prompt = Self.buildDocumentPrompt(question: question, document: document)
+            var text = ""
+            for try await chunk in conversation.sendMessageStream(Message(prompt)) {
+                for content in chunk.contents {
+                    if case let .text(t) = content { text += t }
+                }
+            }
+            text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return text.isEmpty ? "Gemma returned an empty answer — try rephrasing." : text
+        } catch {
+            return "Gemma couldn't answer this time (\(error.localizedDescription))."
+        }
+    }
+
+    /// Prompt for questions about an exported document. The document is already
+    /// truncated by the caller to fit the model's context window.
+    static func buildDocumentPrompt(question: String, document: String) -> String {
+        """
+        You are a concise health-data analyst. Below is an export of the user's \
+        Apple Health data in Markdown. Answer the question using ONLY this data. \
+        Point out trends, notable values, and changes over time where relevant. \
+        Keep it under 120 words. This is wellness insight, not medical advice — never diagnose.
+
+        --- EXPORT START ---
+        \(document)
+        --- EXPORT END ---
+
+        Question: "\(question)"
+
+        Answer:
+        """
+    }
+
     /// Compose a grounded prompt: give Gemma the recovery facts + the question,
     /// and constrain it to a short, wellness-framed (non-medical) answer.
     static func buildPrompt(question: String, context: RecoveryReport) -> String {

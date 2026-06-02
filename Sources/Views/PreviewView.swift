@@ -7,6 +7,7 @@ struct PreviewView: View {
     let markdown: String
     @Environment(\.dismiss) private var dismiss
     @State private var copied = false
+    @State private var showChat = false
     /// Bound to .sheet(item:) so the share sheet can only present once the file
     /// actually exists — fixes the empty grey sheet right after generation.
     @State private var shareItem: ShareItem?
@@ -57,9 +58,18 @@ struct PreviewView: View {
                     Button("Done") { dismiss() }
                         .foregroundStyle(Theme.textPrimary)
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showChat = true } label: {
+                        Image(systemName: "bubble.left.and.text.bubble.right.fill")
+                    }
+                    .tint(Theme.accent)
+                }
             }
             .sheet(item: $shareItem) { item in
                 ShareSheet(items: [item.url])
+            }
+            .sheet(isPresented: $showChat) {
+                ExportChatView(title: "\(report.mode.title) · \(report.range.title)", markdown: markdown)
             }
         }
     }

@@ -5,6 +5,17 @@ protocol LLMEngine {
     /// Human-readable name shown in the UI ("Built-in" vs "Gemma 3n").
     var displayName: String { get }
     func answer(question: String, context: RecoveryReport) async -> String
+    /// Answer a question about an arbitrary exported document (e.g. "is there a
+    /// trend?"). `document` is the export's Markdown (already truncated to fit).
+    func answerAboutDocument(question: String, document: String) async -> String
+}
+
+extension LLMEngine {
+    /// Default for engines that can't read free-form documents (the built-in
+    /// rules engine). Gemma overrides this.
+    func answerAboutDocument(question: String, document: String) async -> String {
+        "Ask the on-device model (Gemma) about your exports — download it on the Readiness → Ask screen. The built-in engine only does recovery questions."
+    }
 }
 
 /// On-device, zero-download engine. Deterministic rules over the recovery data —
