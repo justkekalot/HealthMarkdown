@@ -12,8 +12,9 @@ struct ExportChatView: View {
     @State private var thinking = false
 
     /// Models have a bounded context window; a Full/Raw export can be MBs. Cap
-    /// the document we feed in and tell the user when we truncated.
-    private static let maxChars = 24_000
+    /// the document (~9k chars ≈ 2.5k tokens, leaving room for the prompt + a
+    /// full answer inside the engine's 4096-token budget) and say when we cut.
+    private static let maxChars = 9_000
     private var truncated: Bool { markdown.count > Self.maxChars }
     private var documentForModel: String {
         truncated ? String(markdown.prefix(Self.maxChars)) + "\n\n…(truncated)" : markdown

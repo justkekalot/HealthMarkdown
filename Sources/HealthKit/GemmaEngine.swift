@@ -23,10 +23,13 @@ actor GemmaEngine: LLMEngine {
         // GPU (Metal) backend — what the official sample and benchmarks use, and
         // viable now that the memory entitlement is in place. The CPU path threw
         // "Failed to invoke the compiled model" on this device.
+        // Gemma 4 supports a large context (32K); 1024 was far too small and
+        // rejected longer prompts (export chat: 2327 > 1024). 4096 fits a
+        // trimmed export plus a full answer while staying light on memory.
         let config = try EngineConfig(
             modelPath: modelPath,
             backend: .gpu,
-            maxNumTokens: 1024,
+            maxNumTokens: 4096,
             cacheDir: NSTemporaryDirectory()
         )
         let engine = Engine(engineConfig: config)
