@@ -12,57 +12,29 @@ struct PreviewView: View {
     /// actually exists — fixes the empty grey sheet right after generation.
     @State private var shareItem: ShareItem?
 
-    /// Big exports (full mode over a long window) can be hundreds of KB —
-    /// rendering that as one selectable Text is slow and pointless. Above this
-    /// size we show a file card instead of the raw text.
-    private var isLarge: Bool { markdown.utf8.count > 60_000 }
-
     var body: some View {
         NavigationStack {
             ZStack {
-                Theme.bg.ignoresSafeArea()
-
-                if isLarge {
-                    largeFileCard
-                } else {
-                    ScrollView {
-                        Text(markdown)
-                            .font(.system(.footnote, design: .monospaced))
-                            .foregroundStyle(Theme.textPrimary)
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(16)
-                            .background(
-                                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                    .fill(Theme.surfaceSunken)
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                    .stroke(Theme.cardStroke, lineWidth: 1)
-                            )
-                            .padding(16)
-                            .padding(.bottom, 120)
-                    }
-                    .scrollIndicators(.hidden)
-                }
-
-                VStack {
-                    Spacer()
-                    actionBar
-                }
+                AmbientBackground()
+                ExportSummaryCard(
+                    mode: report.mode,
+                    rangeTitle: report.range.title,
+                    byteSize: byteSize,
+                    statLeft: report.mode.includesRaw ? ("\(report.rawSampleCount)", "raw samples")
+                                                      : ("\(report.totalDataPoints)", "data points"),
+                    statRight: report.mode.includesRaw ? ("\(report.rawSeries.count + report.rawCategorySeries.count)", "metrics")
+                                                       : ("\(report.sectionsWithData.count)", "sections"),
+                    onChat: { showChat = true },
+                    onShare: { share() },
+                    onCopy: { copyToClipboard() },
+                    copied: copied
+                )
             }
-            .navigationTitle("Markdown")
+            .navigationTitle("Export ready")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Done") { dismiss() }
-                        .foregroundStyle(Theme.textPrimary)
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { showChat = true } label: {
-                        Image(systemName: "bubble.left.and.text.bubble.right.fill")
-                    }
-                    .tint(Theme.accent)
+                    Button("Done") { dismiss() }.foregroundStyle(Theme.textPrimary)
                 }
             }
             .sheet(item: $shareItem) { item in
@@ -74,6 +46,12 @@ struct PreviewView: View {
         }
     }
 
+    private func copyToClipboard() {
+        UIPasteboard.general.string = markdown
+        withAnimation { copied = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { withAnimation { copied = false } }
+    }
+
     /// Write the file on demand and present the share sheet only when it exists.
     private func share() {
         if let url = writeTempFile(markdown) {
@@ -81,106 +59,8 @@ struct PreviewView: View {
         }
     }
 
-    private var largeFileCard: some View {
-        VStack {
-            Spacer()
-            GlassCard {
-                VStack(spacing: 16) {
-                    ZStack {
-                        Circle().fill(Theme.heroGradient).frame(width: 72, height: 72)
-                        Image(systemName: "doc.text.fill")
-                            .font(.system(size: 32, weight: .semibold))
-                            .foregroundStyle(.white)
-                    }
-                    Text("Full export ready")
-                        .font(.title3.weight(.bold))
-                        .foregroundStyle(Theme.textPrimary)
-                    Text("This export is large (\(byteSize)). Preview is skipped so it stays fast — share the file straight to your assistant.")
-                        .font(.subheadline)
-                        .foregroundStyle(Theme.textSecondary)
-                        .multilineTextAlignment(.center)
-
-                    HStack(spacing: 18) {
-                        if report.mode.includesRaw {
-                            statPill("\(report.rawSampleCount)", "raw samples")
-                            statPill("\(report.rawSeries.count + report.rawCategorySeries.count)", "metrics")
-                        } else {
-                            statPill("\(report.totalDataPoints)", "data points")
-                            statPill("\(report.sectionsWithData.count)", "sections")
-                        }
-                        statPill(report.range.title, "window")
-                    }
-                    .padding(.top, 4)
-                }
-            }
-            .padding(.horizontal, 20)
-            Spacer()
-            Spacer()
-        }
-    }
-
-    private func statPill(_ value: String, _ label: String) -> some View {
-        VStack(spacing: 2) {
-            Text(value)
-                .font(.headline.weight(.bold))
-                .foregroundStyle(Theme.textPrimary)
-            Text(label)
-                .font(.caption2)
-                .foregroundStyle(Theme.textSecondary)
-        }
-    }
-
     private var byteSize: String {
         ByteCountFormatter.string(fromByteCount: Int64(markdown.utf8.count), countStyle: .file)
-    }
-
-    private var actionBar: some View {
-        HStack(spacing: 12) {
-            // Copy only makes sense for small exports — a multi-MB string on the
-            // pasteboard is useless, so for large exports we offer Share only.
-            if !isLarge {
-                Button {
-                    UIPasteboard.general.string = markdown
-                    withAnimation { copied = true }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
-                        withAnimation { copied = false }
-                    }
-                } label: {
-                    HStack {
-                        Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                        Text(copied ? "Copied" : "Copy")
-                    }
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(Theme.textPrimary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .fill(Theme.controlStrong)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .stroke(Theme.cardStroke, lineWidth: 1)
-                    )
-                }
-            }
-
-            Button {
-                share()
-            } label: {
-                HStack {
-                    Image(systemName: "square.and.arrow.up")
-                    Text(isLarge ? "Share file" : "Share")
-                }
-            }
-            .buttonStyle(PrimaryButtonStyle())
-            .frame(maxWidth: .infinity)
-        }
-        .padding(16)
-        .background(
-            LinearGradient(colors: [Theme.bg.opacity(0), Theme.bg], startPoint: .top, endPoint: .bottom)
-                .ignoresSafeArea()
-        )
     }
 
     private func writeTempFile(_ contents: String) -> URL? {
@@ -202,6 +82,99 @@ struct PreviewView: View {
 struct ShareItem: Identifiable {
     let url: URL
     var id: String { url.path }
+}
+
+/// Action-focused summary of a generated export. We never show the raw Markdown
+/// (it's noise for the user); the file is for sharing / chatting, not reading.
+struct ExportSummaryCard: View {
+    let mode: ExportMode
+    let rangeTitle: String
+    let byteSize: String
+    let statLeft: (String, String)
+    let statRight: (String, String)
+    let onChat: () -> Void
+    let onShare: () -> Void
+    let onCopy: () -> Void
+    let copied: Bool
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer()
+            VStack(spacing: 18) {
+                ZStack {
+                    Circle().fill(Theme.heroGradient).frame(width: 76, height: 76)
+                        .shadow(color: Theme.accent.opacity(0.3), radius: 14, x: 0, y: 8)
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 34, weight: .bold)).foregroundStyle(.white)
+                }
+                VStack(spacing: 4) {
+                    Text("\(mode.title) export ready")
+                        .font(.title3.weight(.bold)).foregroundStyle(Theme.textPrimary)
+                    Text("\(rangeTitle) · \(byteSize)")
+                        .font(.subheadline).foregroundStyle(Theme.textSecondary)
+                }
+
+                HStack(spacing: 14) {
+                    stat(statLeft)
+                    Divider().frame(height: 32).overlay(Theme.cardStroke)
+                    stat(statRight)
+                }
+                .padding(.vertical, 14).padding(.horizontal, 22)
+                .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.control))
+
+                VStack(spacing: 10) {
+                    Button(action: onChat) {
+                        HStack {
+                            Image(systemName: "sparkles")
+                            Text("Ask Gemma about this")
+                        }
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+
+                    HStack(spacing: 10) {
+                        secondary(icon: "square.and.arrow.up", label: "Share", action: onShare)
+                        secondary(icon: copied ? "checkmark" : "doc.on.doc",
+                                  label: copied ? "Copied" : "Copy", action: onCopy)
+                    }
+                }
+            }
+            .padding(24)
+            .background(
+                RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Theme.surface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(Theme.cardStroke, lineWidth: 1)
+            )
+            .shadow(color: Theme.hairline.opacity(0.06), radius: 16, x: 0, y: 10)
+            .padding(.horizontal, 20)
+            Spacer()
+            Spacer()
+        }
+    }
+
+    private func stat(_ s: (String, String)) -> some View {
+        VStack(spacing: 2) {
+            Text(s.0).font(.title3.weight(.bold)).foregroundStyle(Theme.textPrimary)
+            Text(s.1).font(.caption2).foregroundStyle(Theme.textSecondary)
+        }
+        .frame(minWidth: 70)
+    }
+
+    private func secondary(icon: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack {
+                Image(systemName: icon)
+                Text(label)
+            }
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(Theme.textPrimary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.controlStrong))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Theme.cardStroke, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
 }
 
 /// UIKit share sheet bridge.
