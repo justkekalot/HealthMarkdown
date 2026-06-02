@@ -64,9 +64,12 @@ actor GemmaEngine: LLMEngine {
             try await ensureLoaded()
             guard let engine else { return "The model isn't loaded." }
             if conversation == nil {
+                // Lower temperature: 1.0 made the small E2B model invent numbers
+                // ("6h 3330m", impossible step counts). 0.4 keeps answers varied
+                // but far more faithful to the data.
                 let config = ConversationConfig(
                     systemMessage: Message(systemContext, role: .system),
-                    samplerConfig: try SamplerConfig(topK: 64, topP: 0.95, temperature: 1.0, seed: Int.random(in: 1...1_000_000))
+                    samplerConfig: try SamplerConfig(topK: 40, topP: 0.9, temperature: 0.4, seed: Int.random(in: 1...1_000_000))
                 )
                 conversation = try await engine.createConversation(with: config)
             }
@@ -88,11 +91,12 @@ actor GemmaEngine: LLMEngine {
     /// is already truncated by the caller to fit the context window.
     static func documentSystem(document: String) -> String {
         """
-        You are a concise health-data analyst inside an app. The user's Apple Health \
-        export (Markdown) is below. Answer questions using ONLY this data — point out \
-        trends, notable values, and changes over time. Keep answers under 120 words and \
-        don't repeat the whole context each time. This is wellness insight, not medical \
-        advice — never diagnose. Remember earlier turns in the conversation.
+        You are a precise health-data analyst inside an app. The user's Apple Health \
+        export (Markdown) is below. Answer using ONLY numbers that literally appear in \
+        the data — never invent, round wildly, or guess figures; if a value isn't in the \
+        data, say you don't have it. Quote numbers exactly as written. Point out real \
+        trends and changes. Keep answers under 120 words, don't repeat the whole context \
+        each time. Wellness insight, not medical advice — never diagnose. Remember earlier turns.
 
         --- EXPORT START ---
         \(document)

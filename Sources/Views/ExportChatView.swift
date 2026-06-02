@@ -163,23 +163,27 @@ struct ExportChatView: View {
         let engine = sessionEngine!
         let doc = documentForModel
         Task {
-            let id = await MainActor.run { () -> UUID in
-                let m = AskView.ChatMessage(role: .assistant, text: "")
-                messages.append(m)
-                return m.id
-            }
-            var first = true
+            var assistantId: UUID?
             let full = await engine.answerAboutDocumentStreaming(question: q, document: doc) { chunk in
                 Task { @MainActor in
-                    if first { thinking = false; first = false; Haptics.tick() }
-                    if let idx = messages.firstIndex(where: { $0.id == id }) {
+                    if assistantId == nil {
+                        thinking = false
+                        Haptics.tick()
+                        let m = AskView.ChatMessage(role: .assistant, text: chunk)
+                        messages.append(m)
+                        assistantId = m.id
+                    } else if let id = assistantId, let idx = messages.firstIndex(where: { $0.id == id }) {
                         messages[idx].text += chunk
                     }
                 }
             }
             await MainActor.run {
                 thinking = false
-                if let idx = messages.firstIndex(where: { $0.id == id }) { messages[idx].text = full }
+                if let id = assistantId, let idx = messages.firstIndex(where: { $0.id == id }) {
+                    messages[idx].text = full
+                } else {
+                    messages.append(AskView.ChatMessage(role: .assistant, text: full))
+                }
                 Haptics.success()
             }
         }
