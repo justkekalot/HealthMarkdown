@@ -38,42 +38,38 @@ actor GemmaEngine: LLMEngine {
     }
 
     func answer(question: String, context: RecoveryReport) async -> String {
-        do {
-            try await ensureLoaded()
-            guard let engine else { return "The model isn't loaded." }
-            let conversation = try await engine.createConversation()
-            let prompt = Self.buildPrompt(question: question, context: context)
-            // Use the streaming API — the one-shot sendMessage returns null in
-            // the LiteRT-LM preview; the official sample streams and accumulates.
-            var text = ""
-            for try await chunk in conversation.sendMessageStream(Message(prompt)) {
-                for content in chunk.contents {
-                    if case let .text(t) = content { text += t }
-                }
-            }
-            text = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            return text.isEmpty ? "Gemma returned an empty answer — try rephrasing." : text
-        } catch {
-            return "Gemma couldn't answer this time (\(error.localizedDescription)). The built-in engine still works."
-        }
+        await stream(prompt: Self.buildPrompt(question: question, context: context), onToken: { _ in })
     }
 
     func answerAboutDocument(question: String, document: String) async -> String {
+        await stream(prompt: Self.buildDocumentPrompt(question: question, document: document), onToken: { _ in })
+    }
+
+    func answerStreaming(question: String, context: RecoveryReport, onToken: @escaping @Sendable (String) -> Void) async -> String {
+        await stream(prompt: Self.buildPrompt(question: question, context: context), onToken: onToken)
+    }
+
+    func answerAboutDocumentStreaming(question: String, document: String, onToken: @escaping @Sendable (String) -> Void) async -> String {
+        await stream(prompt: Self.buildDocumentPrompt(question: question, document: document), onToken: onToken)
+    }
+
+    /// Shared streaming core — emits each chunk live via onToken; the one-shot
+    /// sendMessage returns null in the LiteRT-LM preview, so we always stream.
+    private func stream(prompt: String, onToken: @escaping @Sendable (String) -> Void) async -> String {
         do {
             try await ensureLoaded()
             guard let engine else { return "The model isn't loaded." }
             let conversation = try await engine.createConversation()
-            let prompt = Self.buildDocumentPrompt(question: question, document: document)
             var text = ""
             for try await chunk in conversation.sendMessageStream(Message(prompt)) {
                 for content in chunk.contents {
-                    if case let .text(t) = content { text += t }
+                    if case let .text(t) = content { text += t; onToken(t) }
                 }
             }
-            text = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            return text.isEmpty ? "Gemma returned an empty answer — try rephrasing." : text
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? "Gemma returned an empty answer — try rephrasing." : trimmed
         } catch {
-            return "Gemma couldn't answer this time (\(error.localizedDescription))."
+            return "Gemma couldn't answer this time (\(error.localizedDescription)). The built-in engine still works."
         }
     }
 

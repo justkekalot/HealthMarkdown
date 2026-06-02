@@ -102,19 +102,8 @@ struct AskView: View {
     }
 
     private var typingBubble: some View {
-        HStack(spacing: 5) {
-            ForEach(0..<3) { i in
-                Circle().fill(Theme.textSecondary)
-                    .frame(width: 7, height: 7)
-                    .opacity(0.5)
-                    .scaleEffect(thinking ? 1 : 0.6)
-                    .animation(.easeInOut(duration: 0.6).repeatForever().delay(Double(i) * 0.2), value: thinking)
-            }
-            .padding(.vertical, 12).padding(.horizontal, 14)
-        }
-        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.surface))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Theme.cardStroke, lineWidth: 1))
-        .frame(maxWidth: .infinity, alignment: .leading)
+        TypingIndicator()
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var emptyState: some View {
@@ -205,11 +194,29 @@ struct AskView: View {
         question = ""
         messages.append(ChatMessage(role: .user, text: q))
         thinking = true
+        Haptics.tap()
+        let eng = engine
         Task {
-            let reply = await engine.answer(question: q, context: report)
+            let id = await MainActor.run { () -> UUID in
+                let m = ChatMessage(role: .assistant, text: "")
+                messages.append(m)
+                return m.id
+            }
+            var first = true
+            let full = await eng.answerStreaming(question: q, context: report) { chunk in
+                Task { @MainActor in
+                    if first { thinking = false; first = false; Haptics.tick() }
+                    if let idx = messages.firstIndex(where: { $0.id == id }) {
+                        messages[idx].text += chunk
+                    }
+                }
+            }
             await MainActor.run {
                 thinking = false
-                messages.append(ChatMessage(role: .assistant, text: reply))
+                if let idx = messages.firstIndex(where: { $0.id == id }) {
+                    messages[idx].text = full
+                }
+                Haptics.success()
             }
         }
     }

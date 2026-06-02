@@ -8,6 +8,11 @@ protocol LLMEngine {
     /// Answer a question about an arbitrary exported document (e.g. "is there a
     /// trend?"). `document` is the export's Markdown (already truncated to fit).
     func answerAboutDocument(question: String, document: String) async -> String
+
+    /// Streaming variants — call `onToken` with each incremental chunk as it
+    /// arrives (on the main actor), and return the full text.
+    func answerStreaming(question: String, context: RecoveryReport, onToken: @escaping @Sendable (String) -> Void) async -> String
+    func answerAboutDocumentStreaming(question: String, document: String, onToken: @escaping @Sendable (String) -> Void) async -> String
 }
 
 extension LLMEngine {
@@ -15,6 +20,18 @@ extension LLMEngine {
     /// rules engine). Gemma overrides this.
     func answerAboutDocument(question: String, document: String) async -> String {
         "Ask the on-device model (Gemma) about your exports — download it on the Readiness → Ask screen. The built-in engine only does recovery questions."
+    }
+
+    /// Default streaming: run the one-shot method and emit the whole result once.
+    func answerStreaming(question: String, context: RecoveryReport, onToken: @escaping @Sendable (String) -> Void) async -> String {
+        let result = await answer(question: question, context: context)
+        onToken(result)
+        return result
+    }
+    func answerAboutDocumentStreaming(question: String, document: String, onToken: @escaping @Sendable (String) -> Void) async -> String {
+        let result = await answerAboutDocument(question: question, document: document)
+        onToken(result)
+        return result
     }
 }
 
