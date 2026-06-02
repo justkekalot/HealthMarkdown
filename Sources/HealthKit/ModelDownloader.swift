@@ -1,19 +1,21 @@
 import Foundation
 
-/// Downloads a large file (the Gemma .task model) with a URLSessionDownloadTask.
-/// This uses the system's native chunked streaming-to-disk and progress
-/// reporting — far faster and lighter than reading an async byte stream, which
-/// crawled for multi-GB files. Auth header carries the Hugging Face token.
+/// Downloads a large file (the Gemma .task model) with a **background**
+/// URLSessionDownloadTask. A background session keeps running when the app is
+/// backgrounded or the screen locks — a default session is suspended, which is
+/// why progress reset on lock. The download continues and reports progress when
+/// the app is foregrounded again. Auth header carries the Hugging Face token.
 final class ModelDownloader: NSObject, URLSessionDownloadDelegate {
     private let url: URL
     private let token: String
     private let destination: URL
     private let onProgress: (Double) -> Void
-    /// Called once on completion: nil = success, non-nil = error message.
+    /// nil = success, non-nil = error message.
     private let onFinish: (String?) -> Void
 
     private var session: URLSession?
     private var task: URLSessionDownloadTask?
+    private let sessionID: String
 
     init(url: URL, token: String, destination: URL,
          onProgress: @escaping (Double) -> Void,
@@ -23,19 +25,38 @@ final class ModelDownloader: NSObject, URLSessionDownloadDelegate {
         self.destination = destination
         self.onProgress = onProgress
         self.onFinish = onFinish
+        // Unique-but-stable per destination so a relaunch can reattach.
+        self.sessionID = "app.escrime.healthmarkdown.modeldl." + destination.lastPathComponent
     }
 
     func start() {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        let config = URLSessionConfiguration.default
+        request.timeoutInterval = 3600
+
+        let config = URLSessionConfiguration.background(withIdentifier: sessionID)
+        config.isDiscretionary = false               // start now, don't wait for "ideal" conditions
+        config.sessionSendsLaunchEvents = true        // wake the app when done
         config.waitsForConnectivity = true
-        config.timeoutIntervalForResource = 3600 // multi-GB over Wi-Fi
+        config.timeoutIntervalForResource = 24 * 3600 // big file, slow networks
+        config.allowsCellularAccess = true
+
         let session = URLSession(configuration: config, delegate: self, delegateQueue: nil)
         self.session = session
-        let task = session.downloadTask(with: request)
-        self.task = task
-        task.resume()
+
+        // If a previous task for this session is still alive (e.g. after lock),
+        // reattach to it instead of starting a duplicate.
+        session.getAllTasks { [weak self] tasks in
+            guard let self else { return }
+            if let existing = tasks.first as? URLSessionDownloadTask {
+                self.task = existing
+                existing.resume()
+            } else {
+                let task = session.downloadTask(with: request)
+                self.task = task
+                task.resume()
+            }
+        }
     }
 
     func cancel() {
@@ -54,8 +75,6 @@ final class ModelDownloader: NSObject, URLSessionDownloadDelegate {
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask,
                     didFinishDownloadingTo location: URL) {
-        // Check the HTTP status — a gated/auth failure still "finishes" with an
-        // error-body file, which we must not treat as a model.
         if let http = downloadTask.response as? HTTPURLResponse, http.statusCode != 200 {
             let msg = (http.statusCode == 401 || http.statusCode == 403)
                 ? "Access denied (\(http.statusCode)). Check your token and that you accepted the Gemma license on Hugging Face."
@@ -63,6 +82,8 @@ final class ModelDownloader: NSObject, URLSessionDownloadDelegate {
             onFinish(msg)
             return
         }
+        // The temp file is deleted as soon as this method returns, so move it now
+        // (synchronously, on the delegate queue).
         do {
             let fm = FileManager.default
             try? fm.removeItem(at: destination)
