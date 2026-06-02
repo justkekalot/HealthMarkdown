@@ -1,36 +1,45 @@
 import Foundation
-import MediaPipeTasksGenAI
+import LiteRTLM
 
-/// Real on-device Gemma inference via MediaPipe LLM Inference (LlmInference).
-/// Loads a .task model from disk and answers freeform questions, grounded in the
-/// user's recovery data. Device-only — the MediaPipe binaries have no simulator
-/// slice, and the model needs the increased-memory-limit entitlement.
+/// Real on-device Gemma inference via LiteRT-LM (Google's on-device runtime —
+/// the same one AI Edge Gallery uses). Loads a .litertlm model and answers
+/// freeform questions grounded in the recovery data.
+///
+/// Uses the CPU backend: LiteRT-LM mmaps weights there, keeping the memory
+/// footprint far below a naive full load. Device-only.
 actor GemmaEngine: LLMEngine {
     nonisolated let displayName: String
 
     private let modelPath: String
-    private var llm: LlmInference?
+    private var engine: Engine?
 
     init(modelPath: String, displayName: String) {
         self.modelPath = modelPath
         self.displayName = displayName
     }
 
-    private func ensureLoaded() throws {
-        guard llm == nil else { return }
-        let options = LlmInference.Options(modelPath: modelPath)
-        options.maxTokens = 1024
-        options.maxTopk = 40
-        llm = try LlmInference(options: options)
+    private func ensureLoaded() async throws {
+        guard engine == nil else { return }
+        let config = try EngineConfig(
+            modelPath: modelPath,
+            backend: .cpu(),
+            maxNumTokens: 1024,
+            cacheDir: NSTemporaryDirectory()
+        )
+        let engine = Engine(engineConfig: config)
+        try await engine.initialize()
+        self.engine = engine
     }
 
     func answer(question: String, context: RecoveryReport) async -> String {
         do {
-            try ensureLoaded()
-            guard let llm else { return "The model isn't loaded." }
+            try await ensureLoaded()
+            guard let engine else { return "The model isn't loaded." }
+            let conversation = try await engine.createConversation()
             let prompt = Self.buildPrompt(question: question, context: context)
-            // generateResponse blocks; we're already off the main thread (actor).
-            return try llm.generateResponse(inputText: prompt)
+            let reply = try await conversation.sendMessage(Message(prompt))
+            let text = reply.toString.trimmingCharacters(in: .whitespacesAndNewlines)
+            return text.isEmpty ? "Gemma returned an empty answer — try rephrasing." : text
         } catch {
             return "Gemma couldn't answer this time (\(error.localizedDescription)). The built-in engine still works."
         }

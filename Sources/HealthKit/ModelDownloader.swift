@@ -31,7 +31,11 @@ final class ModelDownloader: NSObject, URLSessionDownloadDelegate {
 
     func start() {
         var request = URLRequest(url: url)
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        // Token is optional — the Gemma 4 litert-lm repos are public. Only send
+        // auth if one was provided (for gated repos / rate limits).
+        if !token.trimmingCharacters(in: .whitespaces).isEmpty {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
         request.timeoutInterval = 3600
 
         let config = URLSessionConfiguration.background(withIdentifier: sessionID)

@@ -10,39 +10,31 @@ import Combine
 final class GemmaModelManager: ObservableObject {
 
     enum Variant: String, CaseIterable, Identifiable {
-        case lite, e2b, e4b
+        case e2b, e4b
         var id: String { rawValue }
         var title: String {
             switch self {
-            case .lite: return "Gemma 3 1B (Lite)"
-            case .e2b: return "Gemma 3n E2B"
-            case .e4b: return "Gemma 3n E4B"
+            case .e2b: return "Gemma 4 E2B"
+            case .e4b: return "Gemma 4 E4B"
             }
         }
         var sizeText: String {
             switch self {
-            case .lite: return "≈ 555 MB"
-            case .e2b: return "≈ 3.1 GB"
-            case .e4b: return "≈ 4.4 GB"
+            case .e2b: return "≈ 2.6 GB"
+            case .e4b: return "≈ 3.7 GB"
             }
         }
         var blurb: String {
             switch self {
-            case .lite: return "Recommended. Small enough to run within iOS memory limits on any account — answers are solid for this use."
-            case .e2b: return "Sharper answers, but ~3 GB needs the increased-memory entitlement (paid Apple Developer account) or it will fail to load."
-            case .e4b: return "Best answers, but ~4.4 GB — paid account only; may still hit memory limits."
+            case .e2b: return "Recommended. Google's latest small on-device model — the same one AI Edge Gallery uses. Capable and reasonably quick."
+            case .e4b: return "Larger & sharper. More capable answers, needs more space and a bit more time per reply."
             }
         }
-        /// Hugging Face download URL for the MediaPipe .task file.
+        var rawTag: String { self == .e2b ? "E2B" : "E4B" }
+
+        /// Hugging Face download URL for the LiteRT-LM .litertlm file.
         var downloadURL: URL {
-            switch self {
-            case .lite:
-                return URL(string: "https://huggingface.co/litert-community/Gemma3-1B-IT/resolve/main/gemma3-1b-it-int4.task")!
-            case .e2b:
-                return URL(string: "https://huggingface.co/google/gemma-3n-E2B-it-litert-preview/resolve/main/gemma-3n-E2B-it-int4.task")!
-            case .e4b:
-                return URL(string: "https://huggingface.co/google/gemma-3n-E4B-it-litert-preview/resolve/main/gemma-3n-E4B-it-int4.task")!
-            }
+            URL(string: "https://huggingface.co/litert-community/gemma-4-\(rawTag)-it-litert-lm/resolve/main/gemma-4-\(rawTag)-it.litertlm")!
         }
     }
 
@@ -54,7 +46,7 @@ final class GemmaModelManager: ObservableObject {
     }
 
     @Published private(set) var state: State = .notDownloaded
-    @Published var selectedVariant: Variant = .lite
+    @Published var selectedVariant: Variant = .e2b
 
     private let fm = FileManager.default
     private var downloader: ModelDownloader?
@@ -77,7 +69,7 @@ final class GemmaModelManager: ObservableObject {
         return d
     }
 
-    func modelURL(for v: Variant) -> URL { dir.appendingPathComponent("gemma-\(v.rawValue).task") }
+    func modelURL(for v: Variant) -> URL { dir.appendingPathComponent("gemma-4-\(v.rawValue).litertlm") }
 
     var isReady: Bool { if case .ready = state { return true }; return false }
 
@@ -91,16 +83,12 @@ final class GemmaModelManager: ObservableObject {
         }
     }
 
-    /// Begin downloading the selected variant from Hugging Face using the saved
-    /// token (the Gemma repos are license-gated). Uses a URLSessionDownloadTask
-    /// (native chunked streaming to disk + real progress) — NOT a byte-by-byte
-    /// async loop, which was glacially slow for multi-GB files.
+    /// Begin downloading the selected variant from Hugging Face. The
+    /// litert-community Gemma 4 repos are public (no token/license gate), so an
+    /// HF token is optional — it's only sent if the user set one. Uses a
+    /// background URLSession so the multi-GB download survives screen lock.
     func download() {
         guard !isReady else { return }
-        guard hasToken else {
-            state = .failed("Add your Hugging Face token first (the Gemma model is license-gated).")
-            return
-        }
         state = .downloading(progress: 0)
         let dest = modelURL(for: selectedVariant)
         downloader = ModelDownloader(

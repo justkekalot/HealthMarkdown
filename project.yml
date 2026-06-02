@@ -11,23 +11,25 @@ settings:
     MARKETING_VERSION: "1.0.0"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.0"
-    DEVELOPMENT_TEAM: MF369BT56X
+    DEVELOPMENT_TEAM: P44V8VH6DG
     CODE_SIGN_STYLE: Automatic
     GENERATE_INFOPLIST_FILE: NO
     ENABLE_USER_SCRIPT_SANDBOXING: YES
 
 packages:
-  SwiftTasksGenAI:
-    url: https://github.com/paescebu/SwiftTasksGenAI
-    exactVersion: 0.10.24
+  # Vendored locally: upstream's Package.swift uses .unsafeFlags (-all_load),
+  # which SwiftPM rejects for app dependencies. The vendored copy strips that
+  # flag; -all_load is set on the app's OTHER_LDFLAGS below instead.
+  LiteRTLM:
+    path: Vendor/LiteRT-LM
 
 targets:
   HealthMarkdown:
     type: application
     platform: iOS
     dependencies:
-      - package: SwiftTasksGenAI
-        product: SwiftTasksGenAI
+      - package: LiteRTLM
+        product: LiteRTLM
     sources:
       - path: Sources
       - path: HealthMarkdown.storekit
@@ -53,16 +55,19 @@ targets:
       properties:
         com.apple.developer.healthkit: true
         com.apple.developer.healthkit.access: []
-        # NOTE: increased-memory-limit / extended-virtual-addressing entitlements
-        # require a PAID Apple Developer account (free personal teams reject them).
-        # Without them, large models may be jetsam-killed; E2B is the safest bet.
-        # Re-add these once on a paid team for reliable large-model loading.
+        # Paid Amden team supports these — lets large LiteRT-LM models load
+        # without hitting the default per-process memory ceiling.
+        com.apple.developer.kernel.increased-memory-limit: true
+        com.apple.developer.kernel.extended-virtual-addressing: true
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: app.escrime.healthmarkdown
+        PRODUCT_BUNDLE_IDENTIFIER: tech.amden.healthmarkdown
         TARGETED_DEVICE_FAMILY: "1,2"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        # LiteRTLM needs -all_load (its xcframework registers ObjC categories at
+        # link time). Set here since we stripped it from the vendored package.
+        OTHER_LDFLAGS: "-Xlinker -all_load"
 
 schemes:
   HealthMarkdown:
