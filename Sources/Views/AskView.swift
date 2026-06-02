@@ -21,6 +21,7 @@ struct AskView: View {
     /// Held for the whole chat so the Gemma conversation (and its memory)
     /// persists across turns instead of resetting every message.
     @State private var sessionEngine: LLMEngine?
+    @State private var genTask: Task<Void, Never>?
 
     private let suggestions = [
         "Am I ready for a marathon today?",
@@ -55,9 +56,10 @@ struct AskView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Done") { dismiss() }.foregroundStyle(Theme.textPrimary)
+                    Button("Done") { genTask?.cancel(); dismiss() }.foregroundStyle(Theme.textPrimary)
                 }
             }
+            .onDisappear { genTask?.cancel() }
             .sheet(isPresented: $showGemmaSheet) { GemmaSetupView() }
         }
     }
@@ -204,7 +206,7 @@ struct AskView: View {
         thinking = true
         Haptics.tap()
         let eng = engineForSession()
-        Task {
+        genTask = Task {
             // Keep the typing indicator until the FIRST token; only then create
             // the assistant bubble and stream into it (so there's never an empty
             // bubble sitting there looking broken).

@@ -12,6 +12,7 @@ struct ExportChatView: View {
     @State private var thinking = false
     /// Held for the session so the Gemma conversation keeps its memory.
     @State private var sessionEngine: LLMEngine?
+    @State private var genTask: Task<Void, Never>?
 
     /// Models have a bounded context window; a Full/Raw export can be MBs. Cap
     /// the document (~9k chars ≈ 2.5k tokens, leaving room for the prompt + a
@@ -43,9 +44,10 @@ struct ExportChatView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Done") { dismiss() }.foregroundStyle(Theme.textPrimary)
+                    Button("Done") { genTask?.cancel(); dismiss() }.foregroundStyle(Theme.textPrimary)
                 }
             }
+            .onDisappear { genTask?.cancel() }
         }
     }
 
@@ -162,7 +164,7 @@ struct ExportChatView: View {
         if sessionEngine == nil { sessionEngine = gemma.makeEngine() ?? BuiltInEngine() }
         let engine = sessionEngine!
         let doc = documentForModel
-        Task {
+        genTask = Task {
             var assistantId: UUID?
             let full = await engine.answerAboutDocumentStreaming(question: q, document: doc) { chunk in
                 Task { @MainActor in

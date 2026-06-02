@@ -64,18 +64,19 @@ actor GemmaEngine: LLMEngine {
             try await ensureLoaded()
             guard let engine else { return "The model isn't loaded." }
             if conversation == nil {
-                // Lower temperature: 1.0 made the small E2B model invent numbers
-                // ("6h 3330m", impossible step counts). 0.4 keeps answers varied
-                // but far more faithful to the data.
+                // Temperature 0 + topK 1 → greedy/deterministic decoding,
+                // maximally faithful to the data (correctness over variety).
                 let config = ConversationConfig(
                     systemMessage: Message(systemContext, role: .system),
-                    samplerConfig: try SamplerConfig(topK: 40, topP: 0.9, temperature: 0.4, seed: Int.random(in: 1...1_000_000))
+                    samplerConfig: try SamplerConfig(topK: 1, topP: 1.0, temperature: 0.0)
                 )
                 conversation = try await engine.createConversation(with: config)
             }
             guard let conversation else { return "The model isn't ready." }
             var text = ""
             for try await chunk in conversation.sendMessageStream(Message(question)) {
+                // Stop cleanly if the chat was dismissed mid-generation.
+                if Task.isCancelled { break }
                 for content in chunk.contents {
                     if case let .text(t) = content { text += t; onToken(t) }
                 }
