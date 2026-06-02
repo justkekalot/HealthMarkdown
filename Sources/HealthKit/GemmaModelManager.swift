@@ -10,18 +10,39 @@ import Combine
 final class GemmaModelManager: ObservableObject {
 
     enum Variant: String, CaseIterable, Identifiable {
-        case e2b, e4b
+        case lite, e2b, e4b
         var id: String { rawValue }
-        var title: String { self == .e2b ? "Gemma 3n E2B" : "Gemma 3n E4B" }
-        var sizeText: String { self == .e2b ? "≈ 3.1 GB" : "≈ 4.4 GB" }
-        var blurb: String {
-            self == .e2b
-            ? "Recommended. Runs reliably on-device — good answers, fits in memory."
-            : "Experimental. Sharper answers, but ~4.4 GB may hit iOS memory limits and crash on some devices."
+        var title: String {
+            switch self {
+            case .lite: return "Gemma 3 1B (Lite)"
+            case .e2b: return "Gemma 3n E2B"
+            case .e4b: return "Gemma 3n E4B"
+            }
         }
-        /// Hugging Face download URL for the MediaPipe .task (int4) file.
+        var sizeText: String {
+            switch self {
+            case .lite: return "≈ 555 MB"
+            case .e2b: return "≈ 3.1 GB"
+            case .e4b: return "≈ 4.4 GB"
+            }
+        }
+        var blurb: String {
+            switch self {
+            case .lite: return "Recommended. Small enough to run within iOS memory limits on any account — answers are solid for this use."
+            case .e2b: return "Sharper answers, but ~3 GB needs the increased-memory entitlement (paid Apple Developer account) or it will fail to load."
+            case .e4b: return "Best answers, but ~4.4 GB — paid account only; may still hit memory limits."
+            }
+        }
+        /// Hugging Face download URL for the MediaPipe .task file.
         var downloadURL: URL {
-            URL(string: "https://huggingface.co/google/gemma-3n-\(self == .e2b ? "E2B" : "E4B")-it-litert-preview/resolve/main/gemma-3n-\(self == .e2b ? "E2B" : "E4B")-it-int4.task")!
+            switch self {
+            case .lite:
+                return URL(string: "https://huggingface.co/litert-community/Gemma3-1B-IT/resolve/main/gemma3-1b-it-int4.task")!
+            case .e2b:
+                return URL(string: "https://huggingface.co/google/gemma-3n-E2B-it-litert-preview/resolve/main/gemma-3n-E2B-it-int4.task")!
+            case .e4b:
+                return URL(string: "https://huggingface.co/google/gemma-3n-E4B-it-litert-preview/resolve/main/gemma-3n-E4B-it-int4.task")!
+            }
         }
     }
 
@@ -33,7 +54,7 @@ final class GemmaModelManager: ObservableObject {
     }
 
     @Published private(set) var state: State = .notDownloaded
-    @Published var selectedVariant: Variant = .e2b
+    @Published var selectedVariant: Variant = .lite
 
     private let fm = FileManager.default
     private var downloader: ModelDownloader?
