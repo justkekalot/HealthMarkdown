@@ -20,9 +20,12 @@ actor GemmaEngine: LLMEngine {
 
     private func ensureLoaded() async throws {
         guard engine == nil else { return }
+        // GPU (Metal) backend — what the official sample and benchmarks use, and
+        // viable now that the memory entitlement is in place. The CPU path threw
+        // "Failed to invoke the compiled model" on this device.
         let config = try EngineConfig(
             modelPath: modelPath,
-            backend: .cpu(),
+            backend: .gpu,
             maxNumTokens: 1024,
             cacheDir: NSTemporaryDirectory()
         )
