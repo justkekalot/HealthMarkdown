@@ -18,7 +18,44 @@ struct ExportChatView: View {
     private static let maxChars = 22_000
     private var truncated: Bool { markdown.count > Self.maxChars }
     private var documentForModel: String {
-        truncated ? String(markdown.prefix(Self.maxChars)) + "\n\n…(truncated)" : markdown
+        Self.fit(markdown, to: Self.maxChars)
+    }
+
+    /// Shrink a too-big export to fit the window **without dropping whole metrics**.
+    /// A blunt `prefix()` keeps only the first sections, so late metrics (e.g.
+    /// VO₂ Max, which lives deep in the Heart section of a Raw dump) silently
+    /// vanish and the model truthfully says "I don't have it." Instead we keep
+    /// every section/metric header and the aggregated summary intact, and cap only
+    /// the long per-metric raw sample tables — so the model still sees every metric.
+    static func fit(_ markdown: String, to maxChars: Int) -> String {
+        guard markdown.count > maxChars else { return markdown }
+        let rowsPerMetric = 6
+        var out = ""
+        var inRaw = false          // row-capping applies only to the Raw Samples dump
+        var pipeRows = 0           // pipe-lines since the current metric header
+        var noted = false
+        for sub in markdown.split(separator: "\n", omittingEmptySubsequences: false) {
+            let line = String(sub)
+            if line.hasPrefix("## Raw Samples") { inRaw = true }
+            if line.hasPrefix("#") {            // any header → new block, reset cap
+                pipeRows = 0; noted = false
+                out += line + "\n"; continue
+            }
+            if inRaw && line.hasPrefix("|") {
+                pipeRows += 1                   // 1 = column header, 2 = |---| separator
+                if pipeRows <= rowsPerMetric + 2 {
+                    out += line + "\n"
+                } else if !noted {
+                    out += "_…(more samples omitted to fit)_\n"; noted = true
+                }
+                continue
+            }
+            out += line + "\n"
+        }
+        // Backstop for a pathological metric count: keep headers we already have,
+        // hard-cap only if the reduced doc is somehow still over budget.
+        if out.count > maxChars { out = String(out.prefix(maxChars)) + "\n\n…(truncated)" }
+        return out
     }
 
     private let suggestions = [
