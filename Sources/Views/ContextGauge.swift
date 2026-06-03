@@ -1,13 +1,14 @@
 import SwiftUI
 
-/// A slim "how full is the model's context window" bar. Turns from accent →
-/// amber → red as it fills, so the user can see when an export/chat is getting
-/// close to the limit.
+/// A slim "how full is the model's memory" strip, sized to sit just above the
+/// composer. It's quiet while there's room and only speaks up — a friendly
+/// "almost full" plus an amber→red bar — as the chat approaches the limit.
 struct ContextGauge: View {
     let used: Int
     let total: Int
 
     private var fraction: Double { min(1, Double(used) / Double(max(1, total))) }
+    private var pct: Int { Int((fraction * 100).rounded()) }
 
     private var color: Color {
         switch fraction {
@@ -17,10 +18,15 @@ struct ContextGauge: View {
         }
     }
 
+    // Plain-language status — only turns into a caution when room runs low.
+    private var label: String { fraction < 0.9 ? "Memory" : "Memory almost full" }
+
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: "gauge.with.dots.needle.bottom.50percent")
-                .font(.caption2).foregroundStyle(Theme.textSecondary)
+            Text(label)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(fraction < 0.9 ? Theme.textSecondary : color)
+                .lineLimit(1)
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule().fill(Theme.hairline.opacity(0.10))
@@ -29,11 +35,11 @@ struct ContextGauge: View {
                         .animation(.easeInOut(duration: 0.4), value: fraction)
                 }
             }
-            .frame(height: 5)
-            Text("\(Int(fraction * 100))%")
-                .font(.caption2.monospacedDigit().weight(.medium))
+            .frame(height: 4)
+            Text("\(pct)%")
+                .font(.caption2.monospacedDigit())
                 .foregroundStyle(Theme.textSecondary)
-                .frame(width: 34, alignment: .trailing)
+                .frame(width: 30, alignment: .trailing)
         }
     }
 }

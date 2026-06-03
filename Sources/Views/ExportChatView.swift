@@ -94,19 +94,14 @@ struct ExportChatView: View {
     }
 
     private var header: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 10) {
-                Image(systemName: gemma.isReady ? "cpu.fill" : "cpu").foregroundStyle(Theme.accent)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(Theme.textPrimary).lineLimit(1)
-                    Text(gemma.isReady ? "\(gemma.selectedVariant.title) · on-device" : "Built-in engine (limited)")
-                        .font(.caption).foregroundStyle(Theme.textSecondary)
-                }
-                Spacer()
+        HStack(spacing: 10) {
+            Image(systemName: gemma.isReady ? "cpu.fill" : "cpu").foregroundStyle(Theme.accent)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(Theme.textPrimary).lineLimit(1)
+                Text(gemma.isReady ? "\(gemma.selectedVariant.title) · on-device" : "Built-in engine (limited)")
+                    .font(.caption).foregroundStyle(Theme.textSecondary)
             }
-            if gemma.isReady {
-                ContextGauge(used: usedTokens, total: GemmaEngine.maxTokens)
-            }
+            Spacer()
         }
         .padding(12)
         .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.control))
@@ -158,7 +153,7 @@ struct ExportChatView: View {
                     .font(.footnote).foregroundStyle(Theme.accent).fixedSize(horizontal: false, vertical: true)
             }
             if truncated {
-                Text("This export is large — the model sees the first part of it.")
+                Text("This export is large — every metric is included, but long raw-sample lists are trimmed to fit.")
                     .font(.caption2).foregroundStyle(Theme.textSecondary)
             }
             Text("TRY ASKING").font(.caption.weight(.semibold)).foregroundStyle(Theme.textSecondary).tracking(1.2)
@@ -179,22 +174,30 @@ struct ExportChatView: View {
     }
 
     private var inputBar: some View {
-        HStack(spacing: 10) {
-            TextField("Ask about this export…", text: $question)
-                .textFieldStyle(.plain)
-                .padding(.vertical, 12).padding(.horizontal, 16)
-                .background(Capsule().fill(Theme.surface))
-                .overlay(Capsule().stroke(Theme.cardStroke, lineWidth: 1))
-                .submitLabel(.send)
-                .onSubmit { send(question) }
-            Button { send(question) } label: {
-                Image(systemName: "arrow.up").font(.headline.weight(.bold)).foregroundStyle(.white)
-                    .frame(width: 46, height: 46).background(Circle().fill(Theme.accent))
+        VStack(spacing: 9) {
+            // Sits with the composer, where "how much room is left" actually
+            // matters — quiet until the chat starts filling the window.
+            if gemma.isReady {
+                ContextGauge(used: usedTokens, total: GemmaEngine.maxTokens)
+                    .padding(.horizontal, 6)
             }
-            .disabled(question.trimmingCharacters(in: .whitespaces).isEmpty || thinking)
-            .opacity(question.trimmingCharacters(in: .whitespaces).isEmpty || thinking ? 0.5 : 1)
+            HStack(spacing: 10) {
+                TextField("Ask about this export…", text: $question)
+                    .textFieldStyle(.plain)
+                    .padding(.vertical, 12).padding(.horizontal, 16)
+                    .background(Capsule().fill(Theme.surface))
+                    .overlay(Capsule().stroke(Theme.cardStroke, lineWidth: 1))
+                    .submitLabel(.send)
+                    .onSubmit { send(question) }
+                Button { send(question) } label: {
+                    Image(systemName: "arrow.up").font(.headline.weight(.bold)).foregroundStyle(.white)
+                        .frame(width: 46, height: 46).background(Circle().fill(Theme.accent))
+                }
+                .disabled(question.trimmingCharacters(in: .whitespaces).isEmpty || thinking)
+                .opacity(question.trimmingCharacters(in: .whitespaces).isEmpty || thinking ? 0.5 : 1)
+            }
         }
-        .padding(16)
+        .padding(.horizontal, 16).padding(.top, 11).padding(.bottom, 16)
         .background(.ultraThinMaterial)
     }
 
