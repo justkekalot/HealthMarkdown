@@ -4,6 +4,10 @@ import SwiftUI
 struct ExportChatView: View {
     let title: String
     let markdown: String
+    /// A clean, model-optimized rendering of the same data (dot decimals, plain
+    /// facts, every metric). Preferred over the human Markdown when available;
+    /// saved exports without one fall back to trimming the Markdown.
+    var digest: String? = nil
     @EnvironmentObject var gemma: GemmaModelManager
     @Environment(\.dismiss) private var dismiss
 
@@ -16,9 +20,10 @@ struct ExportChatView: View {
     /// the document to leave room for the prompt scaffold + a full answer inside
     /// the engine's token budget (~22k chars ≈ 5.5k tokens of the 8192 window).
     private static let maxChars = 22_000
-    private var truncated: Bool { markdown.count > Self.maxChars }
+    /// Only the Markdown-fallback path can be truncated; the digest is compact.
+    private var truncated: Bool { digest == nil && markdown.count > Self.maxChars }
     private var documentForModel: String {
-        Self.fit(markdown, to: Self.maxChars)
+        digest ?? Self.fit(markdown, to: Self.maxChars)
     }
 
     /// Shrink a too-big export to fit the window **without dropping whole metrics**.

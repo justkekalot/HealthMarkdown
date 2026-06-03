@@ -41,7 +41,9 @@ struct PreviewView: View {
                 ShareSheet(items: [item.url])
             }
             .sheet(isPresented: $showChat) {
-                ExportChatView(title: "\(report.mode.title) · \(report.range.title)", markdown: markdown)
+                ExportChatView(title: "\(report.mode.title) · \(report.range.title)",
+                               markdown: markdown,
+                               digest: ModelDigest.make(from: report))
             }
         }
     }

@@ -48,6 +48,12 @@ final class ExportStore: ObservableObject {
         let fileURL = dir.appendingPathComponent(fileName)
         try? markdown.data(using: .utf8)?.write(to: fileURL, options: .atomic)
 
+        // Sidecar: the model-facing digest, so "Ask about export" on a saved
+        // file gets the same clean numbers as a fresh one. A no-op for the
+        // human file; old exports simply lack it and fall back to the Markdown.
+        let digest = ModelDigest.make(from: report)
+        try? digest.data(using: .utf8)?.write(to: digestURL(for: fileName), options: .atomic)
+
         let record = ExportRecord(
             id: id,
             createdAt: report.generatedAt,
@@ -73,10 +79,21 @@ final class ExportStore: ObservableObject {
         dir.appendingPathComponent(record.fileName)
     }
 
+    /// The model-facing digest saved alongside the export, if it exists (older
+    /// exports predate it → nil → caller falls back to the Markdown).
+    func digest(for record: ExportRecord) -> String? {
+        try? String(contentsOf: digestURL(for: record.fileName), encoding: .utf8)
+    }
+
+    private func digestURL(for fileName: String) -> URL {
+        dir.appendingPathComponent((fileName as NSString).deletingPathExtension + ".digest.txt")
+    }
+
     // MARK: - Deleting
 
     func delete(_ record: ExportRecord) {
         try? fm.removeItem(at: dir.appendingPathComponent(record.fileName))
+        try? fm.removeItem(at: digestURL(for: record.fileName))
         records.removeAll { $0.id == record.id }
         persistIndex()
     }
@@ -85,6 +102,7 @@ final class ExportStore: ObservableObject {
         let toRemove = offsets.map { records[$0] }
         for record in toRemove {
             try? fm.removeItem(at: dir.appendingPathComponent(record.fileName))
+            try? fm.removeItem(at: digestURL(for: record.fileName))
         }
         records.remove(atOffsets: offsets)
         persistIndex()

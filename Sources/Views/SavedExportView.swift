@@ -65,7 +65,9 @@ struct SavedExportView: View {
                 ShareSheet(items: [exports.fileURL(for: record)])
             }
             .sheet(isPresented: $showChat) {
-                ExportChatView(title: "\(record.mode.title) · \(record.rangeTitle)", markdown: markdown)
+                ExportChatView(title: "\(record.mode.title) · \(record.rangeTitle)",
+                               markdown: markdown,
+                               digest: exports.digest(for: record))
             }
         }
     }

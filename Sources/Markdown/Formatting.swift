@@ -38,6 +38,23 @@ enum Fmt {
         return decimal.string(from: NSNumber(value: value)) ?? String(format: "%.\(precision)f", value)
     }
 
+    // Unambiguous machine-facing formatter: forced '.' decimal and NO grouping,
+    // regardless of device locale. A small LLM can't tell a European "45,7"
+    // (forty-five point seven) from "457", so the model-facing digest uses this.
+    private static let plainDecimal: NumberFormatter = {
+        let nf = NumberFormatter()
+        nf.numberStyle = .decimal
+        nf.locale = Locale(identifier: "en_US_POSIX")
+        nf.usesGroupingSeparator = false
+        nf.minimumFractionDigits = 0
+        return nf
+    }()
+
+    static func plain(_ value: Double, precision: Int) -> String {
+        plainDecimal.maximumFractionDigits = precision
+        return plainDecimal.string(from: NSNumber(value: value)) ?? String(format: "%.\(precision)f", value)
+    }
+
     static func value(_ value: Double?, _ spec: QuantitySpec) -> String? {
         guard let value else { return nil }
         return "\(number(value, precision: spec.precision)) \(spec.unitLabel)"
