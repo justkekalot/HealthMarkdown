@@ -89,10 +89,7 @@ struct AskView: View {
     private func bubble(_ m: ChatMessage) -> some View {
         HStack {
             if m.role == .user { Spacer(minLength: 40) }
-            Text(m.text)
-                .font(.callout)
-                .foregroundStyle(m.role == .user ? Color.white : Theme.textPrimary)
-                .fixedSize(horizontal: false, vertical: true)
+            ChatBubbleText(text: m.text, isUser: m.role == .user)
                 .padding(.vertical, 11)
                 .padding(.horizontal, 14)
                 .background(

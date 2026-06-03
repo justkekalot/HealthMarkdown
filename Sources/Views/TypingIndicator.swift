@@ -1,71 +1,39 @@
 import SwiftUI
 
-/// A premium "thinking" moment: a softly breathing accent orb with an expanding
-/// ripple ring and three orbiting sparks. Feels alive — interaction-design polish
-/// for the seconds before the model's first token.
+/// A minimal "thinking" cue: three small dots rippling in a travelling wave,
+/// with a soft haptic pulse once per cycle so you *feel* the model working.
+/// Replaces the earlier breathing-orb design — the big dot read as too heavy.
 struct TypingIndicator: View {
-    @State private var animate = false
+    @State private var phase = 0
+
+    // Drives the wave and the haptic beat. One step every 0.42s → a full
+    // three-dot cycle (and one soft tick) roughly once a second.
+    private let beat = Timer.publish(every: 0.42, on: .main, in: .common).autoconnect()
 
     var body: some View {
-        HStack(spacing: 12) {
-            orb
-            Text("Thinking")
-                .font(.callout.weight(.medium))
-                .foregroundStyle(Theme.textSecondary)
-                .opacity(animate ? 1 : 0.5)
-                .animation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true), value: animate)
-        }
-        .padding(.vertical, 12)
-        .padding(.leading, 12)
-        .padding(.trailing, 18)
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Theme.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Theme.cardStroke, lineWidth: 1)
-        )
-        .shadow(color: Theme.accent.opacity(0.14), radius: 12, x: 0, y: 4)
-        .onAppear { animate = true }
-    }
-
-    private var orb: some View {
-        ZStack {
-            // Expanding ripple ring
-            Circle()
-                .stroke(Theme.accent.opacity(0.5), lineWidth: 2)
-                .frame(width: 22, height: 22)
-                .scaleEffect(animate ? 1.9 : 0.7)
-                .opacity(animate ? 0 : 0.8)
-                .animation(.easeOut(duration: 1.4).repeatForever(autoreverses: false), value: animate)
-
-            // Breathing core orb
-            Circle()
-                .fill(
-                    RadialGradient(
-                        colors: [Theme.accent, Theme.accentDeep],
-                        center: .topLeading, startRadius: 1, endRadius: 18
-                    )
-                )
-                .frame(width: 22, height: 22)
-                .scaleEffect(animate ? 1.0 : 0.82)
-                .shadow(color: Theme.accent.opacity(0.6), radius: animate ? 8 : 3)
-                .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: animate)
-
-            // Orbiting sparks
+        HStack(spacing: 6) {
             ForEach(0..<3) { i in
                 Circle()
                     .fill(Theme.accent)
-                    .frame(width: 4, height: 4)
-                    .offset(x: 15)
-                    .rotationEffect(.degrees(animate ? 360 : 0))
-                    .animation(
-                        .linear(duration: 1.6).repeatForever(autoreverses: false)
-                            .delay(Double(i) * 0.53),
-                        value: animate
-                    )
-                    .opacity(0.7)
+                    .frame(width: 6, height: 6)
+                    .scaleEffect(phase == i ? 1.4 : 0.85)
+                    .opacity(phase == i ? 1 : 0.4)
+                    .animation(.easeInOut(duration: 0.42), value: phase)
             }
         }
-        .frame(width: 40, height: 40)
+        .padding(.vertical, 13)
+        .padding(.horizontal, 16)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.surface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Theme.cardStroke, lineWidth: 1)
+        )
+        .onReceive(beat) { _ in
+            let next = (phase + 1) % 3
+            phase = next
+            // One gentle pulse per cycle (when the crest returns to the first dot).
+            if next == 0 { Haptics.tick() }
+        }
     }
 }

@@ -61,25 +61,34 @@ actor GemmaEngine: LLMEngine {
         await ask(question: question, systemContext: Self.documentSystem(document: document), onToken: onToken)
     }
 
-    /// Reuse one conversation across turns (chat memory). The system context is
-    /// set once when the conversation is created; each turn sends just the
-    /// user's question. A non-zero temperature gives varied, non-robotic replies.
+    private var contextSent = false
+
+    /// Reuse one conversation across turns (chat memory). The context (recovery
+    /// data / export) is folded into the FIRST user message — system messages
+    /// are unreliable in the LiteRT-LM preview, which is why "Gemma doesn't see
+    /// the file" happened. Later turns send just the question, so memory holds.
     private func ask(question: String, systemContext: String, onToken: @escaping @Sendable (String) -> Void) async -> String {
         do {
             try await ensureLoaded()
             guard let engine else { return "The model isn't loaded." }
             if conversation == nil {
-                // Temperature 0 + topK 1 → greedy/deterministic decoding,
-                // maximally faithful to the data (correctness over variety).
                 let config = ConversationConfig(
-                    systemMessage: Message(systemContext, role: .system),
                     samplerConfig: try SamplerConfig(topK: 1, topP: 1.0, temperature: 0.0)
                 )
                 conversation = try await engine.createConversation(with: config)
+                contextSent = false
             }
             guard let conversation else { return "The model isn't ready." }
+            // First turn: prepend the context so the model actually sees the data.
+            let messageText: String
+            if !contextSent {
+                messageText = systemContext + "\n\n" + question
+                contextSent = true
+            } else {
+                messageText = question
+            }
             var text = ""
-            for try await chunk in conversation.sendMessageStream(Message(question)) {
+            for try await chunk in conversation.sendMessageStream(Message(messageText)) {
                 // Stop cleanly if the chat was dismissed mid-generation.
                 if Task.isCancelled { break }
                 for content in chunk.contents {
