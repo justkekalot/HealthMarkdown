@@ -1,14 +1,13 @@
 import SwiftUI
 
-/// A minimal "thinking" cue: three small dots rippling in a travelling wave,
-/// with a soft haptic pulse once per cycle so you *feel* the model working.
-/// Replaces the earlier breathing-orb design — the big dot read as too heavy.
+/// A minimal "thinking" cue: three small dots rippling in a travelling wave.
+/// Purely visual — driven by SwiftUI's own repeating animation, NOT a timer, and
+/// it fires no haptics. (Haptics happen at discrete moments instead: a tap when
+/// you send, a tick on the first token, a success chime when the answer lands.
+/// An earlier timer-driven per-cycle buzz here never stopped while the chat was
+/// open — that's gone.)
 struct TypingIndicator: View {
-    @State private var phase = 0
-
-    // Drives the wave and the haptic beat. One step every 0.42s → a full
-    // three-dot cycle (and one soft tick) roughly once a second.
-    private let beat = Timer.publish(every: 0.42, on: .main, in: .common).autoconnect()
+    @State private var animate = false
 
     var body: some View {
         HStack(spacing: 6) {
@@ -16,9 +15,12 @@ struct TypingIndicator: View {
                 Circle()
                     .fill(Theme.accent)
                     .frame(width: 6, height: 6)
-                    .scaleEffect(phase == i ? 1.4 : 0.85)
-                    .opacity(phase == i ? 1 : 0.4)
-                    .animation(.easeInOut(duration: 0.42), value: phase)
+                    .scaleEffect(animate ? 1.0 : 0.5)
+                    .opacity(animate ? 1 : 0.35)
+                    .animation(
+                        .easeInOut(duration: 0.6).repeatForever().delay(Double(i) * 0.18),
+                        value: animate
+                    )
             }
         }
         .padding(.vertical, 13)
@@ -29,11 +31,6 @@ struct TypingIndicator: View {
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Theme.cardStroke, lineWidth: 1)
         )
-        .onReceive(beat) { _ in
-            let next = (phase + 1) % 3
-            phase = next
-            // One gentle pulse per cycle (when the crest returns to the first dot).
-            if next == 0 { Haptics.tick() }
-        }
+        .onAppear { animate = true }
     }
 }
