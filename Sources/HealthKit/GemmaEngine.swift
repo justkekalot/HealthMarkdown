@@ -21,18 +21,23 @@ actor GemmaEngine: LLMEngine {
         self.displayName = displayName
     }
 
+    /// The model's total token window (prompt + generation). Gemma 4 supports
+    /// 32K; 8192 gives lots of room for bigger exports while staying light on
+    /// memory/latency. Exposed so the chat UI can show a context-fill gauge.
+    static let maxTokens = 8192
+
+    /// Rough token estimate for the UI gauge (~4 chars/token for English/Markdown).
+    static func estimateTokens(_ text: String) -> Int { max(1, text.count / 4) }
+
     private func ensureLoaded() async throws {
         guard engine == nil else { return }
         // GPU (Metal) backend — what the official sample and benchmarks use, and
         // viable now that the memory entitlement is in place. The CPU path threw
         // "Failed to invoke the compiled model" on this device.
-        // Gemma 4 supports a large context (32K); 1024 was far too small and
-        // rejected longer prompts (export chat: 2327 > 1024). 4096 fits a
-        // trimmed export plus a full answer while staying light on memory.
         let config = try EngineConfig(
             modelPath: modelPath,
             backend: .gpu,
-            maxNumTokens: 4096,
+            maxNumTokens: Self.maxTokens,
             cacheDir: NSTemporaryDirectory()
         )
         let engine = Engine(engineConfig: config)

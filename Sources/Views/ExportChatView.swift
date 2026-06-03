@@ -15,9 +15,9 @@ struct ExportChatView: View {
     @State private var genTask: Task<Void, Never>?
 
     /// Models have a bounded context window; a Full/Raw export can be MBs. Cap
-    /// the document (~9k chars ≈ 2.5k tokens, leaving room for the prompt + a
-    /// full answer inside the engine's 4096-token budget) and say when we cut.
-    private static let maxChars = 9_000
+    /// the document to leave room for the prompt scaffold + a full answer inside
+    /// the engine's token budget (~22k chars ≈ 5.5k tokens of the 8192 window).
+    private static let maxChars = 22_000
     private var truncated: Bool { markdown.count > Self.maxChars }
     private var documentForModel: String {
         truncated ? String(markdown.prefix(Self.maxChars)) + "\n\n…(truncated)" : markdown
@@ -51,15 +51,27 @@ struct ExportChatView: View {
         }
     }
 
+    /// Estimated tokens used so far: the document (system context) + every turn.
+    private var usedTokens: Int {
+        var t = GemmaEngine.estimateTokens(documentForModel)
+        for m in messages { t += GemmaEngine.estimateTokens(m.text) }
+        return t
+    }
+
     private var header: some View {
-        HStack(spacing: 10) {
-            Image(systemName: gemma.isReady ? "cpu.fill" : "cpu").foregroundStyle(Theme.accent)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(Theme.textPrimary).lineLimit(1)
-                Text(gemma.isReady ? "\(gemma.selectedVariant.title) · on-device" : "Built-in engine (limited)")
-                    .font(.caption).foregroundStyle(Theme.textSecondary)
+        VStack(spacing: 10) {
+            HStack(spacing: 10) {
+                Image(systemName: gemma.isReady ? "cpu.fill" : "cpu").foregroundStyle(Theme.accent)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(Theme.textPrimary).lineLimit(1)
+                    Text(gemma.isReady ? "\(gemma.selectedVariant.title) · on-device" : "Built-in engine (limited)")
+                        .font(.caption).foregroundStyle(Theme.textSecondary)
+                }
+                Spacer()
             }
-            Spacer()
+            if gemma.isReady {
+                ContextGauge(used: usedTokens, total: GemmaEngine.maxTokens)
+            }
         }
         .padding(12)
         .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.control))
