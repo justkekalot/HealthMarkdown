@@ -20,6 +20,24 @@ enum RecoveryAnalyzer {
         }
     }
 
+    /// The most recent sample of a quantity within `since…now` (value + date).
+    /// For sparse metrics like VO₂ Max, which an overnight average would miss.
+    private static func latestSample(_ store: HKHealthStore, _ id: HKQuantityTypeIdentifier, unit: HKUnit, since: Date, now: Date) async -> (value: Double, date: Date)? {
+        guard let type = HKQuantityType.quantityType(forIdentifier: id) else { return nil }
+        let predicate = HKQuery.predicateForSamples(withStart: since, end: now, options: [])
+        let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
+        return await withCheckedContinuation { cont in
+            let q = HKSampleQuery(sampleType: type, predicate: predicate, limit: 1, sortDescriptors: [sort]) { _, samples, _ in
+                if let s = samples?.first as? HKQuantitySample {
+                    cont.resume(returning: (s.quantity.doubleValue(for: unit), s.endDate))
+                } else {
+                    cont.resume(returning: nil)
+                }
+            }
+            store.execute(q)
+        }
+    }
+
     /// Total asleep time (seconds) for sleep sessions overlapping an interval.
     private static func asleep(_ store: HKHealthStore, interval: DateInterval) async -> Double? {
         guard let type = HKCategoryType.categoryType(forIdentifier: .sleepAnalysis) else { return nil }
@@ -60,9 +78,20 @@ enum RecoveryAnalyzer {
         async let slpT = asleep(store, interval: todayNight)
         async let slpY = asleep(store, interval: yesterdayNight)
 
+        // VO₂ Max: cardio fitness, not an overnight signal — it updates every
+        // few days from outdoor workouts, so take the latest reading (within a
+        // year) and compare it to a baseline from ~1–4 months ago for a slow trend.
+        let vo2Unit = HKUnit(from: "ml/kg*min")
+        let yearAgo = calendar.date(byAdding: .day, value: -365, to: now) ?? now
+        let baseStart = calendar.date(byAdding: .day, value: -120, to: now) ?? now
+        let baseEnd = calendar.date(byAdding: .day, value: -35, to: now) ?? now
+        async let vo2L = latestSample(store, .vo2Max, unit: vo2Unit, since: yearAgo, now: now)
+        async let vo2B = avg(store, .vo2Max, unit: vo2Unit, interval: DateInterval(start: baseStart, end: baseEnd))
+
         let hrvToday = await hrvT, hrvYest = await hrvY
         let rhrToday = await rhrT, rhrYest = await rhrY
         let sleepToday = await slpT, sleepYest = await slpY
+        let vo2Latest = await vo2L, vo2Base = await vo2B
 
         var metrics: [RecoveryMetric] = []
         var scoreParts: [Double] = []
@@ -100,6 +129,19 @@ enum RecoveryAnalyzer {
             scoreParts.append(clamp((t / (8 * 3600)) * 100))
         }
 
+        // VO₂ Max — informational fitness context, NOT folded into the daily
+        // recovery score (fitness level isn't overnight readiness). Dot-decimal
+        // formatting so the value stays unambiguous in the readiness chat too.
+        if let v = vo2Latest {
+            let trend = trendHigherBetter(v.value, vo2Base, tolerance: 0.5)
+            metrics.append(.init(key: "vo2max", title: "VO₂ Max", symbol: "figure.run",
+                                 todayText: "\(Fmt.plain(v.value, precision: 1)) ml/kg·min",
+                                 yesterdayText: nil,
+                                 subtitle: "latest · \(Fmt.shortDate(v.date))",
+                                 deltaText: vo2Delta(v.value, vo2Base),
+                                 trend: trend))
+        }
+
         let score: Int? = scoreParts.isEmpty ? nil : Int((scoreParts.reduce(0,+) / Double(scoreParts.count)).rounded())
         let headline = headline(for: score, metrics: metrics)
         return RecoveryReport(date: now, score: score, headline: headline, metrics: metrics)
@@ -128,6 +170,15 @@ enum RecoveryAnalyzer {
         let d = Int((t - y).rounded())
         if d == 0 { return "±0 \(unit)" }
         return "\(d > 0 ? "+" : "−")\(abs(d)) \(unit)"
+    }
+
+    /// Slow VO₂ Max trend vs an earlier baseline. Dot decimal (C locale via
+    /// String(format:)) so it reads "+0.8" everywhere, never "+0,8".
+    private static func vo2Delta(_ t: Double, _ base: Double?) -> String? {
+        guard let base else { return nil }
+        let d = t - base
+        if abs(d) < 0.05 { return "±0.0 vs earlier" }
+        return String(format: "%@%.1f vs earlier", d > 0 ? "+" : "−", abs(d))
     }
 
     private static func sleepDelta(_ t: Double, _ y: Double?) -> String? {

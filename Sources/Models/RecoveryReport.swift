@@ -13,6 +13,10 @@ struct RecoveryMetric: Identifiable {
     let symbol: String
     let todayText: String       // formatted value, e.g. "61 ms"
     let yesterdayText: String?
+    /// Overrides the default "yesterday <value>" secondary line — used by
+    /// metrics that aren't a day-over-day comparison (e.g. VO₂ Max, which
+    /// updates over weeks, shows "latest · <date>").
+    var subtitle: String? = nil
     let deltaText: String?      // e.g. "+6 ms", "−4 bpm"
     let trend: TrendDirection
     var id: String { key }

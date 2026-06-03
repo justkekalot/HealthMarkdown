@@ -29,8 +29,11 @@ struct TemplateNarrator: RecoveryNarrator {
         var parts: [String] = []
 
         // What's driving the score: name the standout improvement and concern.
-        let improved = report.metrics.filter { $0.trend == .better }
-        let worsened = report.metrics.filter { $0.trend == .worse }
+        // Only the overnight signals — VO₂ Max is a slow fitness metric, not a
+        // day-over-day change, so it doesn't belong in "vs yesterday" wording.
+        let daily = report.metrics.filter { $0.key != "vo2max" }
+        let improved = daily.filter { $0.trend == .better }
+        let worsened = daily.filter { $0.trend == .worse }
         if let win = improved.first, let loss = worsened.first {
             parts.append("Your \(win.title.lowercased()) improved, but \(loss.title.lowercased()) moved the wrong way — so your body is recovered, just not fully topped up.")
         } else if !improved.isEmpty {

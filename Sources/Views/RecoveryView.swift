@@ -161,7 +161,9 @@ struct RecoveryView: View {
                             .frame(width: 28)
                         VStack(alignment: .leading, spacing: 1) {
                             Text(m.title).font(.subheadline.weight(.medium)).foregroundStyle(Theme.textPrimary)
-                            if let y = m.yesterdayText {
+                            if let sub = m.subtitle {
+                                Text(sub).font(.caption2).foregroundStyle(Theme.textSecondary)
+                            } else if let y = m.yesterdayText {
                                 Text("yesterday \(y)").font(.caption2).foregroundStyle(Theme.textSecondary)
                             }
                         }
