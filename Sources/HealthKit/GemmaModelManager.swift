@@ -73,7 +73,15 @@ final class GemmaModelManager: ObservableObject {
 
     var isReady: Bool { if case .ready = state { return true }; return false }
 
-    init() { refreshState() }
+    init() {
+        // Default to whichever variant is actually downloaded (the user may have
+        // E4B even though E2B is the nominal default) so the model is selected
+        // automatically instead of falling back to the built-in engine.
+        if let downloaded = Variant.allCases.first(where: { fm.fileExists(atPath: modelURL(for: $0).path) }) {
+            selectedVariant = downloaded
+        }
+        refreshState()
+    }
 
     func refreshState() {
         if fm.fileExists(atPath: modelURL(for: selectedVariant).path) {
@@ -116,13 +124,39 @@ final class GemmaModelManager: ObservableObject {
     }
 
     func delete() {
+        releaseEngine()
         try? fm.removeItem(at: modelURL(for: selectedVariant))
         refreshState()
     }
 
+    /// One long-lived engine, cached on the manager (which lives for the whole
+    /// app session). The native LiteRT-LM Conversation/Session SEGFAULTs on
+    /// deallocation in this preview binding, so we must NOT let the engine
+    /// deinit when a chat view closes — keep it here, not in view @State.
+    private var cachedEngine: GemmaEngine?
+    private var cachedEngineVariant: Variant?
+    private var cachedEnginePath: String?
+
     /// A ready engine for the downloaded model, or nil if not downloaded.
+    /// Reuses the cached engine unless the model/variant changed.
     func makeEngine() -> LLMEngine? {
         guard isReady else { return nil }
-        return GemmaEngine(modelPath: modelURL(for: selectedVariant).path, displayName: selectedVariant.title)
+        let path = modelURL(for: selectedVariant).path
+        if let e = cachedEngine, cachedEngineVariant == selectedVariant, cachedEnginePath == path {
+            return e
+        }
+        let e = GemmaEngine(modelPath: path, displayName: selectedVariant.title)
+        cachedEngine = e
+        cachedEngineVariant = selectedVariant
+        cachedEnginePath = path
+        return e
+    }
+
+    /// Drop the cached engine (e.g. when the model is deleted or variant swapped
+    /// and we want to free it). Safe because no view holds a strong ref.
+    func releaseEngine() {
+        cachedEngine = nil
+        cachedEngineVariant = nil
+        cachedEnginePath = nil
     }
 }

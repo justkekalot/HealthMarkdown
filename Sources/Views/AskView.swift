@@ -18,9 +18,6 @@ struct AskView: View {
     @State private var question = ""
     @State private var thinking = false
     @State private var showGemmaSheet = false
-    /// Held for the whole chat so the Gemma conversation (and its memory)
-    /// persists across turns instead of resetting every message.
-    @State private var sessionEngine: LLMEngine?
     @State private var genTask: Task<Void, Never>?
 
     private let suggestions = [
@@ -30,11 +27,11 @@ struct AskView: View {
         "Can I push for a PR?",
     ]
 
+    /// The engine is cached on the long-lived GemmaModelManager (NOT in view
+    /// state) — the native LiteRT-LM Conversation crashes if deallocated when
+    /// the chat closes, so the view must not own it.
     private func engineForSession() -> LLMEngine {
-        if let e = sessionEngine { return e }
-        let e = gemma.makeEngine() ?? BuiltInEngine()
-        sessionEngine = e
-        return e
+        gemma.makeEngine() ?? BuiltInEngine()
     }
 
     var body: some View {

@@ -10,8 +10,6 @@ struct ExportChatView: View {
     @State private var messages: [AskView.ChatMessage] = []
     @State private var question = ""
     @State private var thinking = false
-    /// Held for the session so the Gemma conversation keeps its memory.
-    @State private var sessionEngine: LLMEngine?
     @State private var genTask: Task<Void, Never>?
 
     /// Models have a bounded context window; a Full/Raw export can be MBs. Cap
@@ -173,8 +171,7 @@ struct ExportChatView: View {
         messages.append(.init(role: .user, text: q))
         thinking = true
         Haptics.tap()
-        if sessionEngine == nil { sessionEngine = gemma.makeEngine() ?? BuiltInEngine() }
-        let engine = sessionEngine!
+        let engine = gemma.makeEngine() ?? BuiltInEngine()  // cached on the manager
         let doc = documentForModel
         genTask = Task {
             var assistantId: UUID?
