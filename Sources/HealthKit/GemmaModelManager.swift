@@ -50,15 +50,6 @@ final class GemmaModelManager: ObservableObject {
 
     private let fm = FileManager.default
     private var downloader: ModelDownloader?
-    private let tokenKey = "hfToken"
-
-    /// Hugging Face access token (Gemma repos are license-gated). Stored on
-    /// device only; never committed or transmitted anywhere but Hugging Face.
-    var hfToken: String {
-        get { UserDefaults.standard.string(forKey: tokenKey) ?? "" }
-        set { UserDefaults.standard.set(newValue, forKey: tokenKey); objectWillChange.send() }
-    }
-    var hasToken: Bool { !hfToken.trimmingCharacters(in: .whitespaces).isEmpty }
 
     private var dir: URL {
         let base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -92,16 +83,15 @@ final class GemmaModelManager: ObservableObject {
     }
 
     /// Begin downloading the selected variant from Hugging Face. The
-    /// litert-community Gemma 4 repos are public (no token/license gate), so an
-    /// HF token is optional — it's only sent if the user set one. Uses a
-    /// background URLSession so the multi-GB download survives screen lock.
+    /// litert-community Gemma 4 repos are public — no token, account, or license
+    /// gate — so this is a plain unauthenticated download. Uses a background
+    /// URLSession so the multi-GB download survives screen lock.
     func download() {
         guard !isReady else { return }
         state = .downloading(progress: 0)
         let dest = modelURL(for: selectedVariant)
         downloader = ModelDownloader(
             url: selectedVariant.downloadURL,
-            token: hfToken,
             destination: dest,
             onProgress: { [weak self] p in
                 Task { @MainActor in self?.state = .downloading(progress: p) }

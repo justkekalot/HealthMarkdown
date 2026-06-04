@@ -1,13 +1,13 @@
 import Foundation
 
-/// Downloads a large file (the Gemma .task model) with a **background**
+/// Downloads a large file (the Gemma .litertlm model) with a **background**
 /// URLSessionDownloadTask. A background session keeps running when the app is
 /// backgrounded or the screen locks — a default session is suspended, which is
 /// why progress reset on lock. The download continues and reports progress when
-/// the app is foregrounded again. Auth header carries the Hugging Face token.
+/// the app is foregrounded again. The Gemma 4 litert-community repos are public,
+/// so no auth/token is needed.
 final class ModelDownloader: NSObject, URLSessionDownloadDelegate {
     private let url: URL
-    private let token: String
     private let destination: URL
     private let onProgress: (Double) -> Void
     /// nil = success, non-nil = error message.
@@ -17,11 +17,10 @@ final class ModelDownloader: NSObject, URLSessionDownloadDelegate {
     private var task: URLSessionDownloadTask?
     private let sessionID: String
 
-    init(url: URL, token: String, destination: URL,
+    init(url: URL, destination: URL,
          onProgress: @escaping (Double) -> Void,
          onFinish: @escaping (String?) -> Void) {
         self.url = url
-        self.token = token
         self.destination = destination
         self.onProgress = onProgress
         self.onFinish = onFinish
@@ -30,13 +29,7 @@ final class ModelDownloader: NSObject, URLSessionDownloadDelegate {
     }
 
     func start() {
-        var request = URLRequest(url: url)
-        // Token is optional — the Gemma 4 litert-lm repos are public. Only send
-        // auth if one was provided (for gated repos / rate limits).
-        if !token.trimmingCharacters(in: .whitespaces).isEmpty {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-        request.timeoutInterval = 3600
+        let request = URLRequest(url: url, timeoutInterval: 3600)
 
         let config = URLSessionConfiguration.background(withIdentifier: sessionID)
         config.isDiscretionary = false               // start now, don't wait for "ideal" conditions
@@ -80,10 +73,7 @@ final class ModelDownloader: NSObject, URLSessionDownloadDelegate {
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask,
                     didFinishDownloadingTo location: URL) {
         if let http = downloadTask.response as? HTTPURLResponse, http.statusCode != 200 {
-            let msg = (http.statusCode == 401 || http.statusCode == 403)
-                ? "Access denied (\(http.statusCode)). Check your token and that you accepted the Gemma license on Hugging Face."
-                : "Download failed (HTTP \(http.statusCode))."
-            onFinish(msg)
+            onFinish("Download failed (HTTP \(http.statusCode)). Please try again.")
             return
         }
         // The temp file is deleted as soon as this method returns, so move it now
