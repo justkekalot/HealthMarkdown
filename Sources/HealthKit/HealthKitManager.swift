@@ -448,6 +448,38 @@ final class HealthKitManager: ObservableObject {
         return summary
     }
 
+    /// Individual workouts (newest first) over a window, with per-session HR —
+    /// the data behind the Workouts tab's multi-select export.
+    func fetchWorkoutList(since: Date, now: Date = Date()) async -> [WorkoutDetail] {
+        let predicate = HKQuery.predicateForSamples(withStart: since, end: now, options: [])
+        let samples: [HKWorkout] = await withCheckedContinuation { continuation in
+            let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)
+            let query = HKSampleQuery(sampleType: HKObjectType.workoutType(), predicate: predicate,
+                                      limit: HKObjectQueryNoLimit, sortDescriptors: [sort]) { _, samples, _ in
+                continuation.resume(returning: (samples as? [HKWorkout]) ?? [])
+            }
+            store.execute(query)
+        }
+        let bpm = HKUnit.count().unitDivided(by: .minute())
+        return samples.map { w in
+            let energy = w.statistics(for: HKQuantityType(.activeEnergyBurned))?
+                .sumQuantity()?.doubleValue(for: .kilocalorie())
+            let distance = (w.statistics(for: HKQuantityType(.distanceWalkingRunning))?.sumQuantity()
+                ?? w.statistics(for: HKQuantityType(.distanceCycling))?.sumQuantity()
+                ?? w.statistics(for: HKQuantityType(.distanceSwimming))?.sumQuantity())?
+                .doubleValue(for: .meterUnit(with: .kilo))
+            let hr = w.statistics(for: HKQuantityType(.heartRate))
+            return WorkoutDetail(
+                id: w.uuid,
+                activityName: Self.describe(activity: w.workoutActivityType),
+                symbol: Self.symbol(activity: w.workoutActivityType),
+                start: w.startDate, end: w.endDate, duration: w.duration,
+                distanceKm: distance, energyKcal: energy,
+                avgHeartRate: hr?.averageQuantity()?.doubleValue(for: bpm),
+                maxHeartRate: hr?.maximumQuantity()?.doubleValue(for: bpm))
+        }
+    }
+
     // MARK: - Describers
 
     static func describe(sex: HKBiologicalSex) -> String? {
@@ -510,6 +542,31 @@ final class HealthKitManager: ObservableObject {
         case .tennis: return "Tennis"
         case .climbing: return "Climbing"
         default: return "Workout"
+        }
+    }
+
+    static func symbol(activity: HKWorkoutActivityType) -> String {
+        switch activity {
+        case .running: return "figure.run"
+        case .walking: return "figure.walk"
+        case .cycling: return "figure.outdoor.cycle"
+        case .swimming: return "figure.pool.swim"
+        case .traditionalStrengthTraining, .functionalStrengthTraining: return "dumbbell.fill"
+        case .highIntensityIntervalTraining: return "figure.highintensity.intervaltraining"
+        case .yoga: return "figure.yoga"
+        case .hiking: return "figure.hiking"
+        case .elliptical: return "figure.elliptical"
+        case .rowing: return "figure.rower"
+        case .fencing: return "figure.fencing"
+        case .coreTraining: return "figure.core.training"
+        case .dance: return "figure.dance"
+        case .pilates: return "figure.pilates"
+        case .stairClimbing, .stairs: return "figure.stair.stepper"
+        case .soccer: return "figure.soccer"
+        case .basketball: return "figure.basketball"
+        case .tennis: return "figure.tennis"
+        case .climbing: return "figure.climbing"
+        default: return "figure.mixed.cardio"
         }
     }
 }

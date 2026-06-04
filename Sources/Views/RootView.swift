@@ -55,11 +55,17 @@ struct MainTabView: View {
                 }
                 .tag(1)
 
+            WorkoutsView()
+                .tabItem {
+                    Label("Workouts", systemImage: "figure.run")
+                }
+                .tag(2)
+
             HistoryView()
                 .tabItem {
                     Label("History", image: "tab-history")
                 }
-                .tag(2)
+                .tag(3)
         }
         .tint(Theme.accent)
     }
