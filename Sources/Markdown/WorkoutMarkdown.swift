@@ -1,12 +1,13 @@
 import Foundation
 
-/// Renders selected workouts to Markdown. Two outputs, same split as the health
-/// export: `human` is locale-formatted and nicely sectioned for sharing; `digest`
-/// is the model-facing version (dot decimals, plain facts) so Gemma reads the
-/// numbers correctly. Workouts are assumed newest-first; both render in that order.
+/// Renders selected workouts to Markdown — always the *fullest* version, every
+/// field HealthKit gave us. `human` is locale-formatted, fully bulleted (incl.
+/// lap splits) for sharing; `digest` is the model-facing version (dot decimals,
+/// one compact-but-complete line per workout) so Gemma reads the numbers right
+/// without blowing its context on long split lists. Workouts are newest-first.
 enum WorkoutMarkdown {
 
-    // MARK: - Human-facing
+    // MARK: - Human-facing (fullest)
 
     static func human(_ workouts: [WorkoutDetail]) -> String {
         guard let first = workouts.first, let last = workouts.last else { return "# Workouts\n\n_No workouts selected._\n" }
@@ -26,20 +27,38 @@ enum WorkoutMarkdown {
 
         for w in workouts {
             s += "## \(w.activityName) — \(Fmt.dateTime(w.start))\n\n"
-            s += "- **Duration:** \(Fmt.duration(w.duration))\n"
-            if let d = w.distanceKm, d > 0 { s += "- **Distance:** \(Fmt.number(d, precision: 2)) km\n" }
-            if let e = w.energyKcal, e > 0 { s += "- **Active energy:** \(Fmt.number(e, precision: 0)) kcal\n" }
-            if let avg = w.avgHeartRate {
-                let mx = w.maxHeartRate.map { ", \(Int($0.rounded())) bpm max" } ?? ""
-                s += "- **Heart rate:** \(Int(avg.rounded())) bpm avg\(mx)\n"
+            var b: [String] = []
+            func add(_ label: String, _ value: String?) { if let v = value { b.append("- **\(label):** \(v)") } }
+            let n0: (Double) -> String = { Fmt.number($0, precision: 0) }
+            let n1: (Double) -> String = { Fmt.number($0, precision: 1) }
+
+            add("Duration", Fmt.duration(w.duration))
+            add("Distance", w.distanceKm.flatMap { $0 > 0 ? "\(Fmt.number($0, precision: 2)) km" : nil })
+            add("Pace", w.paceMinPerKm.map { "\(pace($0)) /km" })
+            add("Avg speed", w.avgSpeedKmh.flatMap { $0 > 0 ? "\(n1($0)) km/h" : nil })
+            add("Max speed", w.maxSpeedKmh.flatMap { $0 > 0 ? "\(n1($0)) km/h" : nil })
+            add("Active energy", w.energyKcal.flatMap { $0 > 0 ? "\(n0($0)) kcal" : nil })
+            add("Total energy", w.totalEnergyKcal.flatMap { $0 > 0 ? "\(n0($0)) kcal" : nil })
+            add("Heart rate", heartRate(w, n: { "\(Int($0.rounded()))" }))
+            add("Avg MET", w.avgMET.map { "\(n1($0))" })
+            add("Steps", w.stepCount.flatMap { $0 > 0 ? n0($0) : nil })
+            add("Flights climbed", w.flightsClimbed.flatMap { $0 > 0 ? n0($0) : nil })
+            add("Elevation gain", w.elevationAscendedM.flatMap { $0 > 0 ? "\(n0($0)) m" : nil })
+            add("Swim strokes", w.swimStrokeCount.flatMap { $0 > 0 ? n0($0) : nil })
+            add("Pool length", w.swimLapLengthM.flatMap { $0 > 0 ? "\(n0($0)) m" : nil })
+            add("Weather", weather(w, n: n0))
+            add("Environment", w.indoor.map { $0 ? "Indoor" : "Outdoor" })
+            if !w.lapDurations.isEmpty {
+                add("Laps (\(w.lapDurations.count))", w.lapDurations.map { Fmt.duration($0) }.joined(separator: ", "))
             }
-            if let p = w.paceMinPerKm { s += "- **Pace:** \(pace(p)) /km\n" }
-            s += "\n"
+            add("Segments", w.segmentCount > 0 ? "\(w.segmentCount)" : nil)
+            add("Source", w.sourceName)
+            s += b.joined(separator: "\n") + "\n\n"
         }
         return s
     }
 
-    // MARK: - Model-facing digest
+    // MARK: - Model-facing digest (complete, compact)
 
     static func digest(_ workouts: [WorkoutDetail]) -> String {
         var s = "Apple Health workouts export, for you to analyse.\n"
@@ -55,18 +74,47 @@ enum WorkoutMarkdown {
         s += ".\n\n"
 
         for w in workouts {
-            var parts = "- \(w.activityName), \(Fmt.dateTime(w.start)): \(Fmt.duration(w.duration))"
-            if let d = w.distanceKm, d > 0 { parts += ", \(Fmt.plain(d, precision: 2)) km" }
-            if let e = w.energyKcal, e > 0 { parts += ", \(Fmt.plain(e, precision: 0)) kcal" }
-            if let avg = w.avgHeartRate {
-                let mx = w.maxHeartRate.map { " / \(Int($0.rounded())) max" } ?? ""
-                parts += ", HR \(Int(avg.rounded())) avg\(mx) bpm"
-            }
-            if let p = w.paceMinPerKm { parts += ", pace \(pace(p)) /km" }
-            s += parts + ".\n"
+            let p0: (Double) -> String = { Fmt.plain($0, precision: 0) }
+            let p1: (Double) -> String = { Fmt.plain($0, precision: 1) }
+            var f: [String] = []
+            if let d = w.distanceKm, d > 0 { f.append("\(Fmt.plain(d, precision: 2)) km") }
+            if let p = w.paceMinPerKm { f.append("pace \(pace(p)) /km") }
+            if let sp = w.avgSpeedKmh, sp > 0 { f.append("\(p1(sp)) km/h avg") }
+            if let e = w.energyKcal, e > 0 { f.append("\(p0(e)) kcal active") }
+            if let t = w.totalEnergyKcal, t > 0 { f.append("\(p0(t)) kcal total") }
+            if let hr = heartRate(w, n: { "\(Int($0.rounded()))" }) { f.append("HR \(hr)") }
+            if let m = w.avgMET { f.append("\(p1(m)) MET") }
+            if let st = w.stepCount, st > 0 { f.append("\(p0(st)) steps") }
+            if let fl = w.flightsClimbed, fl > 0 { f.append("\(p0(fl)) flights") }
+            if let el = w.elevationAscendedM, el > 0 { f.append("\(p0(el)) m ascent") }
+            if let sc = w.swimStrokeCount, sc > 0 { f.append("\(p0(sc)) strokes") }
+            if let wx = weather(w, n: p0) { f.append(wx) }
+            if let ind = w.indoor { f.append(ind ? "indoor" : "outdoor") }
+            if !w.lapDurations.isEmpty { f.append("\(w.lapDurations.count) laps") }
+            if let src = w.sourceName { f.append("via \(src)") }
+            s += "- \(w.activityName), \(Fmt.dateTime(w.start)), \(Fmt.duration(w.duration))"
+            if !f.isEmpty { s += ": " + f.joined(separator: ", ") }
+            s += ".\n"
         }
         s += "\nEvery number above is exact, straight from Apple Health."
         return s
+    }
+
+    // MARK: - Helpers
+
+    private static func heartRate(_ w: WorkoutDetail, n: (Double) -> String) -> String? {
+        guard let avg = w.avgHeartRate else { return nil }
+        var s = "\(n(avg)) bpm avg"
+        if let mn = w.minHeartRate, let mx = w.maxHeartRate { s += " (\(n(mn))–\(n(mx)) bpm)" }
+        else if let mx = w.maxHeartRate { s += " (\(n(mx)) bpm max)" }
+        return s
+    }
+
+    private static func weather(_ w: WorkoutDetail, n: (Double) -> String) -> String? {
+        var parts: [String] = []
+        if let t = w.weatherTempC { parts.append("\(n(t))°C") }
+        if let h = w.weatherHumidityPct { parts.append("\(n(h))% humidity") }
+        return parts.isEmpty ? nil : parts.joined(separator: ", ")
     }
 
     /// Minutes-per-km as M:SS.

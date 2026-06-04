@@ -461,22 +461,54 @@ final class HealthKitManager: ObservableObject {
             store.execute(query)
         }
         let bpm = HKUnit.count().unitDivided(by: .minute())
+        let mps = HKUnit.meter().unitDivided(by: .second())
         return samples.map { w in
-            let energy = w.statistics(for: HKQuantityType(.activeEnergyBurned))?
-                .sumQuantity()?.doubleValue(for: .kilocalorie())
-            let distance = (w.statistics(for: HKQuantityType(.distanceWalkingRunning))?.sumQuantity()
-                ?? w.statistics(for: HKQuantityType(.distanceCycling))?.sumQuantity()
-                ?? w.statistics(for: HKQuantityType(.distanceSwimming))?.sumQuantity())?
-                .doubleValue(for: .meterUnit(with: .kilo))
+            func sum(_ id: HKQuantityTypeIdentifier, _ unit: HKUnit) -> Double? {
+                w.statistics(for: HKQuantityType(id))?.sumQuantity()?.doubleValue(for: unit)
+            }
+            func metaQty(_ key: String, _ unit: HKUnit) -> Double? {
+                (w.metadata?[key] as? HKQuantity)?.doubleValue(for: unit)
+            }
+
+            let active = sum(.activeEnergyBurned, .kilocalorie())
+            let basal = sum(.basalEnergyBurned, .kilocalorie())
+            let total = (active != nil || basal != nil) ? (active ?? 0) + (basal ?? 0) : nil
+            let distance = sum(.distanceWalkingRunning, .meterUnit(with: .kilo))
+                ?? sum(.distanceCycling, .meterUnit(with: .kilo))
+                ?? sum(.distanceSwimming, .meterUnit(with: .kilo))
+
             let hr = w.statistics(for: HKQuantityType(.heartRate))
+            let speed = w.statistics(for: HKQuantityType(.runningSpeed))
+                ?? w.statistics(for: HKQuantityType(.cyclingSpeed))
+            // Fall back to average pace from distance/time when no speed series.
+            let avgSpeed = (speed?.averageQuantity()?.doubleValue(for: mps)).map { $0 * 3.6 }
+                ?? (w.duration > 0 ? distance.map { $0 / (w.duration / 3600) } : nil)
+            let maxSpeed = (speed?.maximumQuantity()?.doubleValue(for: mps)).map { $0 * 3.6 }
+
+            let laps = (w.workoutEvents ?? []).filter { $0.type == .lap }.map { $0.dateInterval.duration }
+            let segments = (w.workoutEvents ?? []).filter { $0.type == .segment }.count
+
             return WorkoutDetail(
                 id: w.uuid,
                 activityName: Self.describe(activity: w.workoutActivityType),
                 symbol: Self.symbol(activity: w.workoutActivityType),
                 start: w.startDate, end: w.endDate, duration: w.duration,
-                distanceKm: distance, energyKcal: energy,
+                distanceKm: distance, energyKcal: active, totalEnergyKcal: total,
                 avgHeartRate: hr?.averageQuantity()?.doubleValue(for: bpm),
-                maxHeartRate: hr?.maximumQuantity()?.doubleValue(for: bpm))
+                minHeartRate: hr?.minimumQuantity()?.doubleValue(for: bpm),
+                maxHeartRate: hr?.maximumQuantity()?.doubleValue(for: bpm),
+                avgSpeedKmh: avgSpeed, maxSpeedKmh: maxSpeed,
+                stepCount: sum(.stepCount, .count()),
+                flightsClimbed: sum(.flightsClimbed, .count()),
+                elevationAscendedM: metaQty(HKMetadataKeyElevationAscended, .meter()),
+                swimStrokeCount: sum(.swimmingStrokeCount, .count()),
+                swimLapLengthM: metaQty(HKMetadataKeyLapLength, .meter()),
+                avgMET: metaQty(HKMetadataKeyAverageMETs, HKUnit(from: "kcal/(kg*hr)")),
+                weatherTempC: metaQty(HKMetadataKeyWeatherTemperature, .degreeCelsius()),
+                weatherHumidityPct: metaQty(HKMetadataKeyWeatherHumidity, .percent()).map { $0 * 100 },
+                indoor: (w.metadata?[HKMetadataKeyIndoorWorkout] as? NSNumber)?.boolValue,
+                sourceName: w.sourceRevision.source.name,
+                lapDurations: laps, segmentCount: segments)
         }
     }
 

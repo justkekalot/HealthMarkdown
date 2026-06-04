@@ -75,7 +75,7 @@ struct WorkoutsView: View {
 
     private var list: some View {
         VStack(spacing: 0) {
-            if types.count > 1 { filterBar }
+            if !types.isEmpty { filterBar }
             ScrollView {
                 LazyVStack(spacing: 10) {
                     ForEach(filtered) { w in row(w) }
