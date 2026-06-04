@@ -7,6 +7,7 @@ struct WorkoutsView: View {
 
     @State private var workouts: [WorkoutDetail] = []
     @State private var selected: Set<UUID> = []
+    @State private var activeTypes: Set<String> = []   // empty = all types
     @State private var loading = true
     @State private var shareItem: ShareItem?
     @State private var chat: ChatPayload?
@@ -15,6 +16,21 @@ struct WorkoutsView: View {
     private var since: Date { Calendar.current.date(byAdding: .month, value: -6, to: Date()) ?? Date() }
 
     private var selectedWorkouts: [WorkoutDetail] { workouts.filter { selected.contains($0.id) } }
+
+    /// Distinct activity types present, most frequent first — the filter chips.
+    private var types: [(name: String, symbol: String, count: Int)] {
+        var order: [String] = [], counts: [String: Int] = [:], symbols: [String: String] = [:]
+        for w in workouts {
+            if counts[w.activityName] == nil { order.append(w.activityName); symbols[w.activityName] = w.symbol }
+            counts[w.activityName, default: 0] += 1
+        }
+        return order.map { (name: $0, symbol: symbols[$0] ?? "figure.run", count: counts[$0] ?? 0) }
+            .sorted { $0.count > $1.count || ($0.count == $1.count && $0.name < $1.name) }
+    }
+
+    private var filtered: [WorkoutDetail] {
+        activeTypes.isEmpty ? workouts : workouts.filter { activeTypes.contains($0.activityName) }
+    }
 
     var body: some View {
         NavigationStack {
@@ -34,9 +50,11 @@ struct WorkoutsView: View {
             .toolbar {
                 if !workouts.isEmpty {
                     ToolbarItem(placement: .topBarTrailing) {
-                        Button(selected.count == workouts.count ? "Clear" : "Select all") {
+                        let ids = Set(filtered.map(\.id))
+                        let allSelected = !ids.isEmpty && ids.isSubset(of: selected)
+                        Button(allSelected ? "Clear" : "Select all") {
                             withAnimation(.easeInOut(duration: 0.2)) {
-                                selected = selected.count == workouts.count ? [] : Set(workouts.map(\.id))
+                                if allSelected { selected.subtract(ids) } else { selected.formUnion(ids) }
                             }
                         }
                         .foregroundStyle(Theme.accent)
@@ -56,15 +74,52 @@ struct WorkoutsView: View {
     // MARK: - List
 
     private var list: some View {
-        ScrollView {
-            LazyVStack(spacing: 10) {
-                ForEach(workouts) { w in row(w) }
+        VStack(spacing: 0) {
+            if types.count > 1 { filterBar }
+            ScrollView {
+                LazyVStack(spacing: 10) {
+                    ForEach(filtered) { w in row(w) }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+                .padding(.bottom, selected.isEmpty ? 24 : 96)
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
-            .padding(.bottom, selected.isEmpty ? 24 : 96)
+            .scrollIndicators(.hidden)
+        }
+    }
+
+    private var filterBar: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 8) {
+                chip(label: "All", symbol: "square.grid.2x2", active: activeTypes.isEmpty) {
+                    withAnimation(.easeInOut(duration: 0.15)) { activeTypes = [] }
+                }
+                ForEach(types, id: \.name) { t in
+                    chip(label: "\(t.name) (\(t.count))", symbol: t.symbol, active: activeTypes.contains(t.name)) {
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            if activeTypes.contains(t.name) { activeTypes.remove(t.name) }
+                            else { activeTypes.insert(t.name) }
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 16).padding(.vertical, 10)
         }
         .scrollIndicators(.hidden)
+    }
+
+    private func chip(label: String, symbol: String, active: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: symbol).font(.caption2)
+                Text(label).font(.caption.weight(.medium))
+            }
+            .foregroundStyle(active ? Color.white : Theme.textPrimary)
+            .padding(.vertical, 8).padding(.horizontal, 12)
+            .background(Capsule().fill(active ? Theme.accent : Theme.control))
+            .overlay(Capsule().stroke(active ? Color.clear : Theme.cardStroke, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
     }
 
     private func row(_ w: WorkoutDetail) -> some View {
