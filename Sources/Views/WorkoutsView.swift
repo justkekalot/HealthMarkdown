@@ -66,7 +66,7 @@ struct WorkoutsView: View {
                 AmbientBackground()
                 VStack(spacing: 0) {
                     ScreenHeader(title: "Workouts", subtitle: "Select sessions, export the full data")
-                        .padding(.horizontal, 20).padding(.bottom, 6)
+                        .padding(.horizontal, 20).padding(.top, 20).padding(.bottom, 6)
                     rangeRow
                     if !workouts.isEmpty {
                         if !types.isEmpty { filterBar }

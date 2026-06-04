@@ -11,7 +11,7 @@ struct HistoryView: View {
 
                 VStack(alignment: .leading, spacing: 0) {
                     ScreenHeader(title: "History", subtitle: "Your saved exports")
-                        .padding(.horizontal, 20).padding(.bottom, 8)
+                        .padding(.horizontal, 20).padding(.top, 20).padding(.bottom, 8)
                     if exports.records.isEmpty {
                         emptyState
                     } else {
