@@ -65,13 +65,16 @@ struct WorkoutsView: View {
             ZStack {
                 AmbientBackground()
                 VStack(spacing: 0) {
+                    ScreenHeader(title: "Workouts", subtitle: "Select sessions, export the full data")
+                        .padding(.horizontal, 20).padding(.bottom, 6)
                     rangeRow
                     if !types.isEmpty { filterBar }
                     content
                 }
                 if exporting { progressOverlay }
             }
-            .navigationTitle("Workouts")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
                 if !workouts.isEmpty {
                     ToolbarItem(placement: .topBarTrailing) {

@@ -9,13 +9,17 @@ struct HistoryView: View {
             ZStack {
                 AmbientBackground()
 
-                if exports.records.isEmpty {
-                    emptyState
-                } else {
-                    list
+                VStack(alignment: .leading, spacing: 0) {
+                    ScreenHeader(title: "History", subtitle: "Your saved exports")
+                        .padding(.horizontal, 20).padding(.bottom, 8)
+                    if exports.records.isEmpty {
+                        emptyState
+                    } else {
+                        list
+                    }
                 }
             }
-            .navigationTitle("History")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.hidden, for: .navigationBar)
         }
         .sheet(item: $selected) { record in
@@ -74,6 +78,7 @@ struct HistoryView: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

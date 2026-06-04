@@ -27,25 +27,29 @@ struct DashboardView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 26) {
-                    stepHeader(1, "What to export")
-                    modeSelector
+            ZStack {
+                AmbientBackground()
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 26) {
+                        ScreenHeader(title: "Export", subtitle: "Apple Health → Markdown")
 
-                    stepHeader(2, "Over which period")
-                    rangeChips
+                        stepHeader(1, "What to export")
+                        modeSelector
 
-                    stepHeader(3, "Generate")
-                    actionArea
+                        stepHeader(2, "Over which period")
+                        rangeChips
 
-                    privacyNote
+                        stepHeader(3, "Generate")
+                        actionArea
+
+                        privacyNote
+                    }
+                    .padding(20)
+                    .padding(.bottom, 40)
                 }
-                .padding(20)
-                .padding(.bottom, 40)
+                .scrollIndicators(.hidden)
             }
-            .scrollIndicators(.hidden)
-            .background(Color.clear)
-            .navigationTitle("New Export")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.hidden, for: .navigationBar)
         }
         .sheet(isPresented: $showPreview) {
