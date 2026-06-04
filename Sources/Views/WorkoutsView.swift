@@ -86,10 +86,11 @@ struct WorkoutsView: View {
             }
             .scrollIndicators(.hidden)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     private var filterBar: some View {
-        ScrollView(.horizontal) {
+        ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 chip(label: "All", symbol: "square.grid.2x2", active: activeTypes.isEmpty) {
                     withAnimation(.easeInOut(duration: 0.15)) { activeTypes = [] }
@@ -105,7 +106,9 @@ struct WorkoutsView: View {
             }
             .padding(.horizontal, 16).padding(.vertical, 10)
         }
-        .scrollIndicators(.hidden)
+        // A horizontal ScrollView next to a vertical one collapses to 0 height in
+        // a VStack unless pinned — this is why the chips were invisible.
+        .frame(height: 58)
     }
 
     private func chip(label: String, symbol: String, active: Bool, action: @escaping () -> Void) -> some View {
