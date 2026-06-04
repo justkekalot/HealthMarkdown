@@ -114,7 +114,9 @@ enum HealthCatalog {
         for q in quantities { if let t = q.quantityType { types.insert(t) } }
         for c in categories { if let t = c.categoryType { types.insert(t) } }
         types.insert(HKObjectType.workoutType())
-        types.insert(HKSeriesType.workoutRoute())   // GPS route → max speed, elevation
+        // Workout routes are authorized separately (ensureRouteAccess) because
+        // they require the workout type in the SHARE set — can't go in this
+        // read-only set without throwing.
         // Characteristics
         if let dob = HKCharacteristicType.characteristicType(forIdentifier: .dateOfBirth) { types.insert(dob) }
         if let sex = HKCharacteristicType.characteristicType(forIdentifier: .biologicalSex) { types.insert(sex) }

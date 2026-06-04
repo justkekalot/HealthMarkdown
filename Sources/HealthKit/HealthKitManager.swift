@@ -525,7 +525,11 @@ final class HealthKitManager: ObservableObject {
     /// — HealthKit only shows the sheet if the type is still undetermined.
     func ensureRouteAccess() async {
         guard isAvailable else { return }
-        try? await store.requestAuthorization(toShare: [], read: [HKSeriesType.workoutRoute()])
+        // HealthKit REQUIRES the parent workout type in the SHARE set to authorize
+        // reading workout routes — passing an empty share set throws an ObjC
+        // exception (SIGABRT, uncatchable by try?). We request it but never write.
+        try? await store.requestAuthorization(toShare: [HKObjectType.workoutType()],
+                                              read: [HKSeriesType.workoutRoute()])
     }
 
     /// GPS-derived metrics for the given workouts (by UUID). Heavy — call only for

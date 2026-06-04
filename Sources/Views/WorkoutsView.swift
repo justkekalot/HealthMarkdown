@@ -96,7 +96,6 @@ struct WorkoutsView: View {
                 }
             }
             .task { await load() }
-            .refreshable { await load() }
             .safeAreaInset(edge: .bottom) { if !selected.isEmpty { exportBar } }
             .sheet(item: $shareItem) { ShareSheet(items: [$0.url]) }
             .sheet(isPresented: $showCustom) { customSheet }
@@ -186,6 +185,7 @@ struct WorkoutsView: View {
             .padding(.bottom, selected.isEmpty ? 24 : 96)
         }
         .scrollIndicators(.hidden)
+        .refreshable { await load() }   // pull-to-refresh on the list only — not the chip row
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
