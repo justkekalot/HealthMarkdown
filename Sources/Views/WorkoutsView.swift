@@ -68,9 +68,15 @@ struct WorkoutsView: View {
                     ScreenHeader(title: "Workouts", subtitle: "Select sessions, export the full data")
                         .padding(.horizontal, 20).padding(.bottom, 6)
                     rangeRow
-                    if !types.isEmpty { filterBar }
-                    content
+                    if !workouts.isEmpty {
+                        if !types.isEmpty { filterBar }
+                        workoutList
+                    } else {
+                        Spacer(minLength: 0)
+                    }
                 }
+                if loading { loadingOverlay }
+                else if workouts.isEmpty { emptyState }
                 if exporting { progressOverlay }
             }
             .navigationBarTitleDisplayMode(.inline)
@@ -171,21 +177,22 @@ struct WorkoutsView: View {
 
     // MARK: - Content
 
-    @ViewBuilder private var content: some View {
-        if loading {
-            loadingState
-        } else if workouts.isEmpty {
-            emptyState
-        } else {
-            ScrollView {
-                LazyVStack(spacing: 10) {
-                    ForEach(filtered) { w in row(w) }
-                }
-                .padding(.horizontal, 16).padding(.top, 4)
-                .padding(.bottom, selected.isEmpty ? 24 : 96)
+    private var workoutList: some View {
+        ScrollView {
+            LazyVStack(spacing: 10) {
+                ForEach(filtered) { w in row(w) }
             }
-            .scrollIndicators(.hidden)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .padding(.horizontal, 16).padding(.top, 4)
+            .padding(.bottom, selected.isEmpty ? 24 : 96)
+        }
+        .scrollIndicators(.hidden)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    private var loadingOverlay: some View {
+        VStack(spacing: 12) {
+            ProgressView().tint(Theme.accent)
+            Text("Reading your workouts…").font(.subheadline).foregroundStyle(Theme.textSecondary)
         }
     }
 
@@ -271,14 +278,6 @@ struct WorkoutsView: View {
 
     // MARK: - States
 
-    private var loadingState: some View {
-        VStack(spacing: 12) {
-            ProgressView().tint(Theme.accent)
-            Text("Reading your workouts…").font(.subheadline).foregroundStyle(Theme.textSecondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
     private var emptyState: some View {
         VStack(spacing: 10) {
             Image(systemName: "figure.run").font(.system(size: 34)).foregroundStyle(Theme.textSecondary)
@@ -335,27 +334,37 @@ struct WorkoutsView: View {
         guard !selected.isEmpty, !exporting else { return }
         exporting = true
         var ws = selectedWorkouts
-        await health.ensureRouteAccess()
-        let metrics = await health.routeMetrics(for: ws.map(\.id))
-        for i in ws.indices {
-            if let m = metrics[ws[i].id] {
-                ws[i].routeMaxSpeedKmh = m.maxSpeedKmh
-                ws[i].routeElevationGainM = m.elevationGainM
-                ws[i].routeElevationLossM = m.elevationLossM
+
+        // GPS routes are heavy; only enrich reasonably-sized selections so a giant
+        // "select all" doesn't churn for minutes. Larger exports still carry the
+        // full workout-statistics data, just without GPS max speed / elevation.
+        if ws.count <= 100 {
+            await health.ensureRouteAccess()
+            let metrics = await health.routeMetrics(for: ws.map(\.id))
+            for i in ws.indices {
+                if let m = metrics[ws[i].id] {
+                    ws[i].routeMaxSpeedKmh = m.maxSpeedKmh
+                    ws[i].routeElevationGainM = m.elevationGainM
+                    ws[i].routeElevationLossM = m.elevationLossM
+                }
             }
         }
-        exporting = false
 
+        // Build the (potentially large) Markdown off the main thread.
+        let snapshot = ws
+        let md = await Task.detached(priority: .userInitiated) { WorkoutMarkdown.human(snapshot) }.value
         if share {
-            let md = WorkoutMarkdown.human(ws)
             let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd"
             let url = FileManager.default.temporaryDirectory.appendingPathComponent("Workouts-\(df.string(from: Date())).md")
-            if (try? md.data(using: .utf8)?.write(to: url)) != nil { shareItem = ShareItem(url: url); Haptics.success() }
+            try? md.data(using: .utf8)?.write(to: url)
+            shareItem = ShareItem(url: url)
+            Haptics.success()
         } else {
-            chat = ChatPayload(title: "Workouts · \(ws.count)",
-                               markdown: WorkoutMarkdown.human(ws), digest: WorkoutMarkdown.digest(ws))
+            let digest = await Task.detached(priority: .userInitiated) { WorkoutMarkdown.digest(snapshot) }.value
+            chat = ChatPayload(title: "Workouts · \(snapshot.count)", markdown: md, digest: digest)
             Haptics.tap()
         }
+        exporting = false
     }
 
     private struct ChatPayload: Identifiable {

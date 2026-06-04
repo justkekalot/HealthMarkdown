@@ -529,8 +529,10 @@ final class HealthKitManager: ObservableObject {
     }
 
     /// GPS-derived metrics for the given workouts (by UUID). Heavy — call only for
-    /// the selected workouts at export time, not for the whole list.
-    func routeMetrics(for ids: [UUID]) async -> [UUID: RouteMetrics] {
+    /// the selected workouts at export time, not for the whole list. `nonisolated`
+    /// so the route queries + altitude/speed math run OFF the main thread (parsing
+    /// thousands of CLLocations on main blocked it long enough to be watchdog-killed).
+    nonisolated func routeMetrics(for ids: [UUID]) async -> [UUID: RouteMetrics] {
         guard !ids.isEmpty else { return [:] }
         let workouts: [HKWorkout] = await withCheckedContinuation { cont in
             let q = HKSampleQuery(sampleType: HKObjectType.workoutType(),
@@ -548,7 +550,7 @@ final class HealthKitManager: ObservableObject {
         return out
     }
 
-    private func locations(for workout: HKWorkout) async -> [CLLocation] {
+    nonisolated private func locations(for workout: HKWorkout) async -> [CLLocation] {
         let routes: [HKWorkoutRoute] = await withCheckedContinuation { cont in
             let q = HKSampleQuery(sampleType: HKSeriesType.workoutRoute(),
                                   predicate: HKQuery.predicateForObjects(from: workout),
@@ -573,7 +575,7 @@ final class HealthKitManager: ObservableObject {
         return all
     }
 
-    private static func metrics(from locs: [CLLocation]) -> RouteMetrics {
+    nonisolated private static func metrics(from locs: [CLLocation]) -> RouteMetrics {
         let maxSpeed = locs.compactMap { $0.speed >= 0 ? $0.speed : nil }.max().map { $0 * 3.6 }
         var gain = 0.0, loss = 0.0, prev: Double?
         for l in locs where l.verticalAccuracy >= 0 {
