@@ -36,14 +36,15 @@ enum WorkoutMarkdown {
             add("Distance", w.distanceKm.flatMap { $0 > 0 ? "\(Fmt.number($0, precision: 2)) km" : nil })
             add("Pace", w.paceMinPerKm.map { "\(pace($0)) /km" })
             add("Avg speed", w.avgSpeedKmh.flatMap { $0 > 0 ? "\(n1($0)) km/h" : nil })
-            add("Max speed", w.maxSpeedKmh.flatMap { $0 > 0 ? "\(n1($0)) km/h" : nil })
+            add("Max speed", w.bestMaxSpeedKmh.flatMap { $0 > 0 ? "\(n1($0)) km/h" : nil })
             add("Active energy", w.energyKcal.flatMap { $0 > 0 ? "\(n0($0)) kcal" : nil })
             add("Total energy", w.totalEnergyKcal.flatMap { $0 > 0 ? "\(n0($0)) kcal" : nil })
             add("Heart rate", heartRate(w, n: { "\(Int($0.rounded()))" }))
             add("Avg MET", w.avgMET.map { "\(n1($0))" })
             add("Steps", w.stepCount.flatMap { $0 > 0 ? n0($0) : nil })
             add("Flights climbed", w.flightsClimbed.flatMap { $0 > 0 ? n0($0) : nil })
-            add("Elevation gain", w.elevationAscendedM.flatMap { $0 > 0 ? "\(n0($0)) m" : nil })
+            add("Elevation gain", w.bestElevationGainM.flatMap { $0 > 0 ? "\(n0($0)) m" : nil })
+            add("Elevation loss", w.routeElevationLossM.flatMap { $0 > 0 ? "\(n0($0)) m" : nil })
             add("Swim strokes", w.swimStrokeCount.flatMap { $0 > 0 ? n0($0) : nil })
             add("Pool length", w.swimLapLengthM.flatMap { $0 > 0 ? "\(n0($0)) m" : nil })
             add("Weather", weather(w, n: n0))
@@ -80,13 +81,15 @@ enum WorkoutMarkdown {
             if let d = w.distanceKm, d > 0 { f.append("\(Fmt.plain(d, precision: 2)) km") }
             if let p = w.paceMinPerKm { f.append("pace \(pace(p)) /km") }
             if let sp = w.avgSpeedKmh, sp > 0 { f.append("\(p1(sp)) km/h avg") }
+            if let mx = w.bestMaxSpeedKmh, mx > 0 { f.append("\(p1(mx)) km/h max") }
             if let e = w.energyKcal, e > 0 { f.append("\(p0(e)) kcal active") }
             if let t = w.totalEnergyKcal, t > 0 { f.append("\(p0(t)) kcal total") }
             if let hr = heartRate(w, n: { "\(Int($0.rounded()))" }) { f.append("HR \(hr)") }
             if let m = w.avgMET { f.append("\(p1(m)) MET") }
             if let st = w.stepCount, st > 0 { f.append("\(p0(st)) steps") }
             if let fl = w.flightsClimbed, fl > 0 { f.append("\(p0(fl)) flights") }
-            if let el = w.elevationAscendedM, el > 0 { f.append("\(p0(el)) m ascent") }
+            if let el = w.bestElevationGainM, el > 0 { f.append("\(p0(el)) m ascent") }
+            if let lo = w.routeElevationLossM, lo > 0 { f.append("\(p0(lo)) m descent") }
             if let sc = w.swimStrokeCount, sc > 0 { f.append("\(p0(sc)) strokes") }
             if let wx = weather(w, n: p0) { f.append(wx) }
             if let ind = w.indoor { f.append(ind ? "indoor" : "outdoor") }

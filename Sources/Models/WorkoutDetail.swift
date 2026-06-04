@@ -43,9 +43,19 @@ struct WorkoutDetail: Identifiable, Equatable {
     let lapDurations: [TimeInterval] // per-lap splits, if recorded
     let segmentCount: Int
 
+    // Derived from the GPS route (filled lazily at export time, not on list load).
+    var routeMaxSpeedKmh: Double? = nil
+    var routeElevationGainM: Double? = nil
+    var routeElevationLossM: Double? = nil
+
     /// Average pace in minutes per km, for distance-based workouts only.
     var paceMinPerKm: Double? {
         guard let d = distanceKm, d > 0.05, duration > 0 else { return nil }
         return (duration / 60) / d
     }
+
+    /// Prefer Apple's recorded max from a speed series; fall back to the GPS route.
+    var bestMaxSpeedKmh: Double? { maxSpeedKmh ?? routeMaxSpeedKmh }
+    /// Prefer the workout's elevation metadata; fall back to GPS-derived gain.
+    var bestElevationGainM: Double? { elevationAscendedM ?? routeElevationGainM }
 }

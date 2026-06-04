@@ -1,6 +1,7 @@
 import Foundation
 import HealthKit
 import Combine
+import CoreLocation
 
 /// Owns the HKHealthStore, authorization flow, and all data fetching.
 @MainActor
@@ -510,6 +511,81 @@ final class HealthKitManager: ObservableObject {
                 sourceName: w.sourceRevision.source.name,
                 lapDurations: laps, segmentCount: segments)
         }
+    }
+
+    // MARK: - Workout routes (GPS → max speed, elevation)
+
+    struct RouteMetrics {
+        let maxSpeedKmh: Double?
+        let elevationGainM: Double?
+        let elevationLossM: Double?
+    }
+
+    /// Prompt for workout-route (GPS) access on top of existing grants. Idempotent
+    /// — HealthKit only shows the sheet if the type is still undetermined.
+    func ensureRouteAccess() async {
+        guard isAvailable else { return }
+        try? await store.requestAuthorization(toShare: [], read: [HKSeriesType.workoutRoute()])
+    }
+
+    /// GPS-derived metrics for the given workouts (by UUID). Heavy — call only for
+    /// the selected workouts at export time, not for the whole list.
+    func routeMetrics(for ids: [UUID]) async -> [UUID: RouteMetrics] {
+        guard !ids.isEmpty else { return [:] }
+        let workouts: [HKWorkout] = await withCheckedContinuation { cont in
+            let q = HKSampleQuery(sampleType: HKObjectType.workoutType(),
+                                  predicate: HKQuery.predicateForObjects(with: Set(ids)),
+                                  limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, s, _ in
+                cont.resume(returning: (s as? [HKWorkout]) ?? [])
+            }
+            store.execute(q)
+        }
+        var out: [UUID: RouteMetrics] = [:]
+        for w in workouts {
+            let locs = await locations(for: w)
+            if !locs.isEmpty { out[w.uuid] = Self.metrics(from: locs) }
+        }
+        return out
+    }
+
+    private func locations(for workout: HKWorkout) async -> [CLLocation] {
+        let routes: [HKWorkoutRoute] = await withCheckedContinuation { cont in
+            let q = HKSampleQuery(sampleType: HKSeriesType.workoutRoute(),
+                                  predicate: HKQuery.predicateForObjects(from: workout),
+                                  limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, s, _ in
+                cont.resume(returning: (s as? [HKWorkoutRoute]) ?? [])
+            }
+            store.execute(q)
+        }
+        var all: [CLLocation] = []
+        for route in routes {
+            let locs: [CLLocation] = await withCheckedContinuation { cont in
+                var acc: [CLLocation] = []
+                var resumed = false
+                let q = HKWorkoutRouteQuery(route: route) { _, batch, done, _ in
+                    if let batch { acc.append(contentsOf: batch) }
+                    if done && !resumed { resumed = true; cont.resume(returning: acc) }
+                }
+                store.execute(q)
+            }
+            all.append(contentsOf: locs)
+        }
+        return all
+    }
+
+    private static func metrics(from locs: [CLLocation]) -> RouteMetrics {
+        let maxSpeed = locs.compactMap { $0.speed >= 0 ? $0.speed : nil }.max().map { $0 * 3.6 }
+        var gain = 0.0, loss = 0.0, prev: Double?
+        for l in locs where l.verticalAccuracy >= 0 {
+            if let p = prev {
+                let d = l.altitude - p
+                if d > 0.5 { gain += d } else if d < -0.5 { loss += -d }  // 0.5m noise gate
+            }
+            prev = l.altitude
+        }
+        return RouteMetrics(maxSpeedKmh: maxSpeed,
+                            elevationGainM: gain > 0 ? gain : nil,
+                            elevationLossM: loss > 0 ? loss : nil)
     }
 
     // MARK: - Describers
