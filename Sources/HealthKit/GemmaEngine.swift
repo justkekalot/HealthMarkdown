@@ -127,11 +127,11 @@ actor GemmaEngine: LLMEngine {
 
     /// System context for the readiness chat — set once per conversation.
     static func recoverySystem(context: RecoveryReport) -> String {
-        var facts = "Recovery score: \(context.score.map(String.init) ?? "unknown")/100 (\(context.headline)).\n"
+        var facts = "Recovery score: \(context.score.map(String.init) ?? "unknown")/100 (\(context.headline)). Scored from last night vs the user's personal 60-day baseline.\n"
         for m in context.metrics {
-            let dir = m.trend == .better ? "up" : m.trend == .worse ? "down" : "flat"
-            let y = m.yesterdayText.map { " (yesterday \($0), \(dir))" } ?? ""
-            facts += "- \(m.title): \(m.todayText)\(y)\n"
+            let dir = m.trend == .better ? "above baseline" : m.trend == .worse ? "below baseline" : "near baseline"
+            let ctx = m.subtitle.map { " (\($0); \(dir))" } ?? ""
+            facts += "- \(m.title): \(m.todayText)\(ctx)\n"
         }
         return """
         You are a concise, friendly fitness-recovery assistant inside a health app. \

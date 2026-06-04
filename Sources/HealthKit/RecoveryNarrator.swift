@@ -35,15 +35,15 @@ struct TemplateNarrator: RecoveryNarrator {
         let improved = daily.filter { $0.trend == .better }
         let worsened = daily.filter { $0.trend == .worse }
         if let win = improved.first, let loss = worsened.first {
-            parts.append("Your \(win.title.lowercased()) improved, but \(loss.title.lowercased()) moved the wrong way — so your body is recovered, just not fully topped up.")
+            parts.append("Your \(win.title.lowercased()) is above your baseline, but \(loss.title.lowercased()) came in below your normal — so your body is recovered, just not fully topped up.")
         } else if !improved.isEmpty {
             let names = improved.map { $0.title.lowercased() }.joined(separator: " and ")
-            parts.append("Good signs across the board — \(names) all improved versus yesterday.")
+            parts.append("Good signs across the board — \(names) all sit above your baseline.")
         } else if !worsened.isEmpty {
             let names = worsened.map { $0.title.lowercased() }.joined(separator: " and ")
-            parts.append("A few signals slipped — \(names) came in below yesterday, which usually means incomplete recovery.")
+            parts.append("A few signals are below your baseline — \(names) came in under your normal, which usually means incomplete recovery.")
         } else {
-            parts.append("Your overnight signals held steady versus yesterday.")
+            parts.append("Your overnight signals held right around your baseline.")
         }
 
         if let s = report.score {

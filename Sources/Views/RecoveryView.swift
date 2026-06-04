@@ -112,7 +112,7 @@ struct RecoveryView: View {
                     Text(report.headline)
                         .font(.title3.weight(.bold))
                         .foregroundStyle(Theme.textPrimary)
-                    Text("vs yesterday")
+                    Text("last night vs your baseline")
                         .font(.footnote)
                         .foregroundStyle(Theme.textSecondary)
                 }
