@@ -539,12 +539,17 @@ final class HealthKitManager: ObservableObject {
     /// the selected workouts at export time, not for the whole list. `nonisolated`
     /// so the route queries + altitude/speed math run OFF the main thread (parsing
     /// thousands of CLLocations on main blocked it long enough to be watchdog-killed).
-    nonisolated func routeMetrics(for ids: [UUID]) async -> [UUID: RouteMetrics] {
+    nonisolated func routeMetrics(for ids: [UUID], onProgress: @Sendable (Int, Int) -> Void = { _, _ in }) async -> [UUID: RouteMetrics] {
         let byID = await workoutsByID(ids)
+        let total = byID.count
         var out: [UUID: RouteMetrics] = [:]
+        var done = 0
         for (id, w) in byID {
+            if Task.isCancelled { break }
             let locs = await locations(for: w)
             if !locs.isEmpty { out[id] = Self.metrics(from: locs) }
+            done += 1
+            onProgress(done, total)
         }
         return out
     }
@@ -565,12 +570,15 @@ final class HealthKitManager: ObservableObject {
     /// Full Markdown for a RAW export: every workout's stats + GPS summary, plus a
     /// "Raw GPS Tracks" section dumping every route point. Streams per workout so
     /// only one route's CLLocations are in memory at a time. Off-main (nonisolated).
-    nonisolated func buildRawWorkoutExport(_ workouts: [WorkoutDetail]) async -> String {
+    nonisolated func buildRawWorkoutExport(_ workouts: [WorkoutDetail], onProgress: @Sendable (Int, Int) -> Void = { _, _ in }) async -> String {
         let byID = await workoutsByID(workouts.map(\.id))
+        let total = workouts.count
         var enriched: [WorkoutDetail] = []
         var rawSection = ""
         var trackCount = 0
+        var done = 0
         for w in workouts {
+            if Task.isCancelled { break }
             var ww = w
             if let hk = byID[w.id] {
                 let locs = await locations(for: hk)
@@ -584,6 +592,8 @@ final class HealthKitManager: ObservableObject {
                 }
             }
             enriched.append(ww)
+            done += 1
+            onProgress(done, total)
         }
         var md = WorkoutMarkdown.human(enriched)
         md += "\n---\n\n# Raw GPS Tracks\n\n"

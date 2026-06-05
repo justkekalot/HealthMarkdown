@@ -17,6 +17,9 @@ struct WorkoutsView: View {
     @State private var showCustom = false
     @State private var loading = true
     @State private var exporting = false
+    @State private var exportProgress: Double = 0
+    @State private var exportStatus = ""
+    @State private var exportTask: Task<Void, Never>?
     @State private var showExportModes = false
     @State private var exportMode: WorkoutExportMode = .full
     @State private var shareItem: ShareItem?
@@ -135,7 +138,7 @@ struct WorkoutsView: View {
                 Spacer(minLength: 6)
                 Button {
                     showExportModes = false
-                    Task { await export(mode: exportMode, share: true) }
+                    exportTask = Task { await export(mode: exportMode, share: true) }
                 } label: {
                     HStack {
                         Image(systemName: "sparkles")
@@ -334,7 +337,7 @@ struct WorkoutsView: View {
             Text("\(selected.count) selected")
                 .font(.subheadline.weight(.medium)).foregroundStyle(Theme.textPrimary)
             Spacer()
-            Button { Task { await export(mode: .full, share: false) } } label: {
+            Button { exportTask = Task { await export(mode: .full, share: false) } } label: {
                 Image(systemName: "bubble.left.and.text.bubble.right.fill")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(Theme.accent)
@@ -358,15 +361,34 @@ struct WorkoutsView: View {
 
     private var progressOverlay: some View {
         ZStack {
-            Color.black.opacity(0.35).ignoresSafeArea()
-            VStack(spacing: 12) {
-                ProgressView().tint(.white)
-                Text("Pulling routes & building export…").font(.subheadline).foregroundStyle(.white)
+            Color.black.opacity(0.5).ignoresSafeArea()
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(spacing: 12) {
+                    Image(systemName: "square.and.arrow.up.fill").font(.title3).foregroundStyle(Theme.accent)
+                    Text("Building export").font(.headline).foregroundStyle(Theme.textPrimary)
+                    Spacer()
+                    Text("\(Int(exportProgress * 100))%")
+                        .font(.subheadline.monospacedDigit().weight(.semibold)).foregroundStyle(Theme.textSecondary)
+                }
+                ProgressView(value: min(max(exportProgress, 0.02), 1)).tint(Theme.accent)
+                Text(exportStatus.isEmpty ? "Preparing…" : exportStatus)
+                    .font(.subheadline).foregroundStyle(Theme.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Button(role: .destructive) { cancelExport() } label: {
+                    Text("Cancel export").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered).tint(Theme.accent)
             }
-            .padding(24)
-            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(.ultraThinMaterial))
+            .padding(22)
+            .frame(maxWidth: 330)
+            .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Theme.bg))
+            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Theme.cardStroke, lineWidth: 1))
+            .shadow(color: .black.opacity(0.3), radius: 24, y: 10)
+            .padding(40)
         }
     }
+
+    private func cancelExport() { exportTask?.cancel() }
 
     // MARK: - States
 
@@ -427,16 +449,34 @@ struct WorkoutsView: View {
     private func export(mode: WorkoutExportMode, share: Bool) async {
         guard !selected.isEmpty, !exporting else { return }
         exporting = true
+        exportProgress = 0
+        exportStatus = "Preparing…"
+        defer { exporting = false }
+
         var ws = selectedWorkouts
         let md: String
 
         if mode == .raw {
+            exportStatus = "Reading GPS routes…"
             await health.ensureRouteAccess()
-            md = await health.buildRawWorkoutExport(ws)
+            if Task.isCancelled { return }
+            md = await health.buildRawWorkoutExport(ws) { done, total in
+                Task { @MainActor in
+                    exportProgress = total > 0 ? 0.85 * Double(done) / Double(total) : 0.5
+                    exportStatus = "Reading GPS routes (\(done)/\(total))"
+                }
+            }
         } else {
             if mode == .full {
+                exportStatus = "Reading GPS routes…"
                 await health.ensureRouteAccess()
-                let metrics = await health.routeMetrics(for: ws.map(\.id))
+                if Task.isCancelled { return }
+                let metrics = await health.routeMetrics(for: ws.map(\.id)) { done, total in
+                    Task { @MainActor in
+                        exportProgress = total > 0 ? 0.7 * Double(done) / Double(total) : 0.5
+                        exportStatus = "Reading GPS routes (\(done)/\(total))"
+                    }
+                }
                 for i in ws.indices {
                     if let m = metrics[ws[i].id] {
                         ws[i].routeMaxSpeedKmh = m.maxSpeedKmh
@@ -445,28 +485,38 @@ struct WorkoutsView: View {
                     }
                 }
             }
+            if Task.isCancelled { return }
+            exportProgress = 0.85
+            exportStatus = "Building Markdown…"
             let snapshot = ws
             md = await Task.detached(priority: .userInitiated) { WorkoutMarkdown.human(snapshot) }.value
         }
 
+        if Task.isCancelled { return }
+        let snapshot = ws
+
         if share {
-            let snapshot = ws
+            exportProgress = 0.92
+            exportStatus = "Saving to History…"
             let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd"
             let url = FileManager.default.temporaryDirectory.appendingPathComponent("Workouts-\(df.string(from: Date())).md")
             try? md.data(using: .utf8)?.write(to: url)
-            shareItem = ShareItem(url: url)
-            Haptics.success()
-            // Keep it in History too (with a digest sidecar for Ask Gemma later).
             let digest = await Task.detached(priority: .userInitiated) { WorkoutMarkdown.digest(snapshot) }.value
+            if Task.isCancelled { return }
             exports.saveWorkout(markdown: md, digest: digest, workoutCount: snapshot.count,
                                 mode: mode.asExportMode, createdAt: Date())
+            exportProgress = 1
+            shareItem = ShareItem(url: url)
+            Haptics.success()
         } else {
-            let snapshot = ws
+            exportProgress = 0.9
+            exportStatus = "Preparing chat…"
             let digest = await Task.detached(priority: .userInitiated) { WorkoutMarkdown.digest(snapshot) }.value
+            if Task.isCancelled { return }
+            exportProgress = 1
             chat = ChatPayload(title: "Workouts · \(snapshot.count)", markdown: md, digest: digest)
             Haptics.tap()
         }
-        exporting = false
     }
 
     private struct ChatPayload: Identifiable {
