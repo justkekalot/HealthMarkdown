@@ -15,6 +15,7 @@ struct DashboardView: View {
     /// The record produced by the most recent Generate with the *current*
     /// inputs. Cleared whenever mode/range change so a stale result never lingers.
     @State private var freshRecord: ExportRecord?
+    @State private var generateTask: Task<Void, Never>?
 
     private var isFetching: Bool {
         if case .fetching = health.phase { return true }
@@ -218,7 +219,7 @@ struct DashboardView: View {
                     showPaywall = true
                     return
                 }
-                Task {
+                generateTask = Task {
                     await health.generateReport(for: selectedRange, mode: selectedMode, customInterval: customInterval)
                     if health.phase == .done, let report = health.lastReport {
                         freshRecord = exports.save(report: report, markdown: health.lastMarkdown)
@@ -268,6 +269,12 @@ struct DashboardView: View {
                     }
                 }
                 .frame(height: 8)
+                Button(role: .destructive) {
+                    generateTask?.cancel()
+                } label: {
+                    Text("Cancel export").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered).tint(Theme.accent)
             }
         }
     }

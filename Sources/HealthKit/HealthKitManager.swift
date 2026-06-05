@@ -98,6 +98,7 @@ final class HealthKitManager: ObservableObject {
 
         // Quantities
         for spec in HealthCatalog.quantities {
+            if Task.isCancelled { phase = .idle; return }
             advance(spec.title)
             if let summary = await fetchQuantitySummary(spec: spec, predicate: predicate, interval: interval) {
                 report.quantities.append(summary)
@@ -121,12 +122,14 @@ final class HealthKitManager: ObservableObject {
         // rate, HRV and sleep all get a real time series, not just a summary.
         if mode.includesRaw {
             for spec in HealthCatalog.quantities {
+                if Task.isCancelled { phase = .idle; return }
                 advance("\(spec.title) (raw)")
                 if let series = await fetchRawSeries(spec: spec, interval: interval), series.hasData {
                     report.rawSeries.append(series)
                 }
             }
             for spec in HealthCatalog.categories {
+                if Task.isCancelled { phase = .idle; return }
                 advance("\(spec.title) (raw)")
                 if let series = await fetchRawCategorySeries(spec: spec, interval: interval), series.hasData {
                     report.rawCategorySeries.append(series)
