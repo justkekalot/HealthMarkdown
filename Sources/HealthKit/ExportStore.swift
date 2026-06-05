@@ -68,6 +68,44 @@ final class ExportStore: ObservableObject {
         return record
     }
 
+    /// Saves a workout export (Markdown + model digest) to History.
+    @discardableResult
+    func saveWorkout(markdown: String, digest: String, workoutCount: Int, mode: ExportMode, createdAt: Date) -> ExportRecord {
+        let id = UUID()
+        let fileName = "\(id.uuidString).md"
+        try? markdown.data(using: .utf8)?.write(to: dir.appendingPathComponent(fileName), options: .atomic)
+        try? digest.data(using: .utf8)?.write(to: digestURL(for: fileName), options: .atomic)
+
+        let record = ExportRecord(
+            id: id, createdAt: createdAt, mode: mode,
+            rangeTitle: "\(workoutCount) workout\(workoutCount == 1 ? "" : "s")",
+            dataPoints: workoutCount, sectionCount: 0, fileName: fileName, kind: .workout)
+        records.insert(record, at: 0)
+        persistIndex()
+        return record
+    }
+
+    // MARK: - Sizes
+
+    /// Bytes on disk for one export (the Markdown + its digest sidecar).
+    func byteSize(for record: ExportRecord) -> Int64 {
+        var total: Int64 = 0
+        for url in [fileURL(for: record), digestURL(for: record.fileName)] {
+            if let attrs = try? fm.attributesOfItem(atPath: url.path), let n = attrs[.size] as? NSNumber {
+                total += n.int64Value
+            }
+        }
+        return total
+    }
+
+    var totalBytes: Int64 { records.reduce(0) { $0 + byteSize(for: $1) } }
+
+    func sizeText(for record: ExportRecord) -> String { Self.bytes.string(fromByteCount: byteSize(for: record)) }
+    var totalSizeText: String { Self.bytes.string(fromByteCount: totalBytes) }
+    private static let bytes: ByteCountFormatter = {
+        let f = ByteCountFormatter(); f.countStyle = .file; return f
+    }()
+
     // MARK: - Reading
 
     func markdown(for record: ExportRecord) -> String {

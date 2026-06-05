@@ -6,6 +6,7 @@ import SwiftUI
 /// at export time for the selected workouts only.
 struct WorkoutsView: View {
     @EnvironmentObject var health: HealthKitManager
+    @EnvironmentObject var exports: ExportStore
 
     @State private var workouts: [WorkoutDetail] = []
     @State private var selected: Set<UUID> = []
@@ -17,11 +18,11 @@ struct WorkoutsView: View {
     @State private var loading = true
     @State private var exporting = false
     @State private var showExportModes = false
-    @State private var exportMode: ExportMode = .full
+    @State private var exportMode: WorkoutExportMode = .full
     @State private var shareItem: ShareItem?
     @State private var chat: ChatPayload?
 
-    enum ExportMode: CaseIterable, Identifiable {
+    enum WorkoutExportMode: CaseIterable, Identifiable {
         case quick, full, raw
         var id: Self { self }
         var title: String {
@@ -36,6 +37,10 @@ struct WorkoutsView: View {
         }
         var symbol: String {
             switch self { case .quick: "bolt.fill"; case .full: "location.fill"; case .raw: "square.grid.3x3.fill" }
+        }
+        /// The shared ExportMode this maps to, for History records.
+        var asExportMode: ExportMode {
+            switch self { case .quick: .quick; case .full: .full; case .raw: .raw }
         }
     }
 
@@ -121,7 +126,7 @@ struct WorkoutsView: View {
                 Text("Pick how much detail to include.")
                     .font(.subheadline).foregroundStyle(Theme.textSecondary)
                     .padding(.bottom, 4)
-                ForEach(ExportMode.allCases) { mode in
+                ForEach(WorkoutExportMode.allCases) { mode in
                     Button {
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) { exportMode = mode }
                     } label: { exportModeCard(mode, selected: exportMode == mode) }
@@ -146,7 +151,7 @@ struct WorkoutsView: View {
         .presentationDragIndicator(.visible)
     }
 
-    private func exportModeCard(_ mode: ExportMode, selected: Bool) -> some View {
+    private func exportModeCard(_ mode: WorkoutExportMode, selected: Bool) -> some View {
         HStack(spacing: 14) {
             ZStack {
                 RoundedRectangle(cornerRadius: 11, style: .continuous)
@@ -419,7 +424,7 @@ struct WorkoutsView: View {
     /// Build the selected workouts in the chosen mode and deliver (share or chat).
     /// Quick = stats only (instant). Full = stats + GPS summary. Raw = Full + every
     /// GPS point. No selection-size cap — the user picks the mode knowingly.
-    private func export(mode: ExportMode, share: Bool) async {
+    private func export(mode: WorkoutExportMode, share: Bool) async {
         guard !selected.isEmpty, !exporting else { return }
         exporting = true
         var ws = selectedWorkouts
@@ -445,11 +450,16 @@ struct WorkoutsView: View {
         }
 
         if share {
+            let snapshot = ws
             let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd"
             let url = FileManager.default.temporaryDirectory.appendingPathComponent("Workouts-\(df.string(from: Date())).md")
             try? md.data(using: .utf8)?.write(to: url)
             shareItem = ShareItem(url: url)
             Haptics.success()
+            // Keep it in History too (with a digest sidecar for Ask Gemma later).
+            let digest = await Task.detached(priority: .userInitiated) { WorkoutMarkdown.digest(snapshot) }.value
+            exports.saveWorkout(markdown: md, digest: digest, workoutCount: snapshot.count,
+                                mode: mode.asExportMode, createdAt: Date())
         } else {
             let snapshot = ws
             let digest = await Task.detached(priority: .userInitiated) { WorkoutMarkdown.digest(snapshot) }.value

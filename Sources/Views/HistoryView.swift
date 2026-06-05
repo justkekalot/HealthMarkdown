@@ -10,7 +10,10 @@ struct HistoryView: View {
                 AmbientBackground()
 
                 VStack(alignment: .leading, spacing: 0) {
-                    ScreenHeader(title: "History", subtitle: "Your saved exports")
+                    ScreenHeader(title: "History",
+                                 subtitle: exports.records.isEmpty
+                                    ? "Your saved exports"
+                                    : "\(exports.records.count) export\(exports.records.count == 1 ? "" : "s") · \(exports.totalSizeText)")
                         .padding(.horizontal, 20).padding(.top, 20).padding(.bottom, 8)
                     if exports.records.isEmpty {
                         emptyState
@@ -34,7 +37,7 @@ struct HistoryView: View {
         List {
             ForEach(exports.records) { record in
                 Button { selected = record } label: {
-                    ExportRow(record: record)
+                    ExportRow(record: record, sizeText: exports.sizeText(for: record))
                 }
                 .buttonStyle(.plain)
                 .listRowBackground(Color.clear)
@@ -84,6 +87,13 @@ struct HistoryView: View {
 
 private struct ExportRow: View {
     let record: ExportRecord
+    let sizeText: String
+
+    private var detail: String {
+        record.isWorkout
+            ? sizeText
+            : "\(record.dataPoints) data points · \(record.sectionCount) sections · \(sizeText)"
+    }
 
     var body: some View {
         GlassCard(padding: 16) {
@@ -92,7 +102,7 @@ private struct ExportRow: View {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .fill(Theme.heroGradient)
                         .frame(width: 46, height: 46)
-                    Image(systemName: record.mode.symbol)
+                    Image(systemName: record.isWorkout ? "figure.run" : record.mode.symbol)
                         .font(.system(size: 19, weight: .semibold))
                         .foregroundStyle(.white)
                 }
@@ -108,7 +118,7 @@ private struct ExportRow: View {
                     Text(Fmt.dateTime(record.createdAt))
                         .font(.footnote)
                         .foregroundStyle(Theme.textSecondary)
-                    Text("\(record.dataPoints) data points · \(record.sectionCount) sections")
+                    Text(detail)
                         .font(.caption)
                         .foregroundStyle(Theme.textSecondary)
                 }
