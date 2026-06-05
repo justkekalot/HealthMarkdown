@@ -540,6 +540,16 @@ final class HealthKitManager: ObservableObject {
     /// so the route queries + altitude/speed math run OFF the main thread (parsing
     /// thousands of CLLocations on main blocked it long enough to be watchdog-killed).
     nonisolated func routeMetrics(for ids: [UUID]) async -> [UUID: RouteMetrics] {
+        let byID = await workoutsByID(ids)
+        var out: [UUID: RouteMetrics] = [:]
+        for (id, w) in byID {
+            let locs = await locations(for: w)
+            if !locs.isEmpty { out[id] = Self.metrics(from: locs) }
+        }
+        return out
+    }
+
+    private nonisolated func workoutsByID(_ ids: [UUID]) async -> [UUID: HKWorkout] {
         guard !ids.isEmpty else { return [:] }
         let workouts: [HKWorkout] = await withCheckedContinuation { cont in
             let q = HKSampleQuery(sampleType: HKObjectType.workoutType(),
@@ -549,12 +559,36 @@ final class HealthKitManager: ObservableObject {
             }
             store.execute(q)
         }
-        var out: [UUID: RouteMetrics] = [:]
+        return Dictionary(workouts.map { ($0.uuid, $0) }, uniquingKeysWith: { a, _ in a })
+    }
+
+    /// Full Markdown for a RAW export: every workout's stats + GPS summary, plus a
+    /// "Raw GPS Tracks" section dumping every route point. Streams per workout so
+    /// only one route's CLLocations are in memory at a time. Off-main (nonisolated).
+    nonisolated func buildRawWorkoutExport(_ workouts: [WorkoutDetail]) async -> String {
+        let byID = await workoutsByID(workouts.map(\.id))
+        var enriched: [WorkoutDetail] = []
+        var rawSection = ""
+        var trackCount = 0
         for w in workouts {
-            let locs = await locations(for: w)
-            if !locs.isEmpty { out[w.uuid] = Self.metrics(from: locs) }
+            var ww = w
+            if let hk = byID[w.id] {
+                let locs = await locations(for: hk)
+                if !locs.isEmpty {
+                    let m = Self.metrics(from: locs)
+                    ww.routeMaxSpeedKmh = m.maxSpeedKmh
+                    ww.routeElevationGainM = m.elevationGainM
+                    ww.routeElevationLossM = m.elevationLossM
+                    rawSection += WorkoutMarkdown.rawTrack(for: ww, points: locs)
+                    trackCount += 1
+                }
+            }
+            enriched.append(ww)
         }
-        return out
+        var md = WorkoutMarkdown.human(enriched)
+        md += "\n---\n\n# Raw GPS Tracks\n\n"
+        md += trackCount > 0 ? rawSection : "_No GPS route points recorded for the selected workouts._\n"
+        return md
     }
 
     nonisolated private func locations(for workout: HKWorkout) async -> [CLLocation] {

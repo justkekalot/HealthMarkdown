@@ -1,4 +1,5 @@
 import Foundation
+import CoreLocation
 
 /// Renders selected workouts to Markdown — always the *fullest* version, every
 /// field HealthKit gave us. `human` is locale-formatted, fully bulleted (incl.
@@ -101,6 +102,24 @@ enum WorkoutMarkdown {
         }
         s += "\nEvery number above is exact, straight from Apple Health."
         return s
+    }
+
+    // MARK: - Raw GPS track (RAW export)
+
+    /// Every GPS point of one workout as a table — the rawest data Apple stores.
+    static func rawTrack(for w: WorkoutDetail, points: [CLLocation]) -> String {
+        var s = "## \(w.activityName) — \(Fmt.dateTime(w.start)) · \(points.count) points\n\n"
+        s += "| Time | Latitude | Longitude | Alt (m) | Speed (m/s) | H.acc (m) |\n"
+        s += "|---|---|---|---|---|---|\n"
+        for p in points {
+            let lat = Fmt.plain(p.coordinate.latitude, precision: 6)
+            let lon = Fmt.plain(p.coordinate.longitude, precision: 6)
+            let alt = Fmt.plain(p.altitude, precision: 1)
+            let spd = p.speed >= 0 ? Fmt.plain(p.speed, precision: 2) : "—"
+            let acc = p.horizontalAccuracy >= 0 ? Fmt.plain(p.horizontalAccuracy, precision: 1) : "—"
+            s += "| \(Fmt.isoTimestamp(p.timestamp)) | \(lat) | \(lon) | \(alt) | \(spd) | \(acc) |\n"
+        }
+        return s + "\n"
     }
 
     // MARK: - Helpers

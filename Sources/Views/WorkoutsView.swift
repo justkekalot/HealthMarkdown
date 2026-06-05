@@ -16,8 +16,11 @@ struct WorkoutsView: View {
     @State private var showCustom = false
     @State private var loading = true
     @State private var exporting = false
+    @State private var showExportModes = false
     @State private var shareItem: ShareItem?
     @State private var chat: ChatPayload?
+
+    enum ExportMode { case quick, full, raw }
 
     enum DateRange: String, CaseIterable, Identifiable {
         case month, three, six, year, all, custom
@@ -87,6 +90,15 @@ struct WorkoutsView: View {
             .sheet(isPresented: $showCustom) { customSheet }
             .sheet(item: $chat) { payload in
                 ExportChatView(title: payload.title, markdown: payload.markdown, digest: payload.digest)
+            }
+            .confirmationDialog("Export \(selected.count) workout\(selected.count == 1 ? "" : "s")",
+                                isPresented: $showExportModes, titleVisibility: .visible) {
+                Button("Quick — summary only") { Task { await export(mode: .quick, share: true) } }
+                Button("Full — summary + GPS (max speed, elevation)") { Task { await export(mode: .full, share: true) } }
+                Button("Raw — everything, incl. every GPS point") { Task { await export(mode: .raw, share: true) } }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Quick is instant. Full & Raw read GPS routes — Raw can be large for big selections.")
             }
         }
     }
@@ -247,14 +259,14 @@ struct WorkoutsView: View {
             Text("\(selected.count) selected")
                 .font(.subheadline.weight(.medium)).foregroundStyle(Theme.textPrimary)
             Spacer()
-            Button { Task { await export(share: false) } } label: {
+            Button { Task { await export(mode: .full, share: false) } } label: {
                 Image(systemName: "bubble.left.and.text.bubble.right.fill")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(Theme.accent)
                     .frame(width: 46, height: 46)
                     .background(Circle().fill(Theme.accent.opacity(0.12)))
             }
-            Button { Task { await export(share: true) } } label: {
+            Button { showExportModes = true } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "square.and.arrow.up")
                     Text("Export").font(.subheadline.weight(.semibold))
@@ -334,30 +346,34 @@ struct WorkoutsView: View {
         loading = false
     }
 
-    /// Enrich the current selection with GPS-route metrics, then build & deliver.
-    private func export(share: Bool) async {
+    /// Build the selected workouts in the chosen mode and deliver (share or chat).
+    /// Quick = stats only (instant). Full = stats + GPS summary. Raw = Full + every
+    /// GPS point. No selection-size cap — the user picks the mode knowingly.
+    private func export(mode: ExportMode, share: Bool) async {
         guard !selected.isEmpty, !exporting else { return }
         exporting = true
         var ws = selectedWorkouts
+        let md: String
 
-        // GPS routes are heavy; only enrich reasonably-sized selections so a giant
-        // "select all" doesn't churn for minutes. Larger exports still carry the
-        // full workout-statistics data, just without GPS max speed / elevation.
-        if ws.count <= 100 {
+        if mode == .raw {
             await health.ensureRouteAccess()
-            let metrics = await health.routeMetrics(for: ws.map(\.id))
-            for i in ws.indices {
-                if let m = metrics[ws[i].id] {
-                    ws[i].routeMaxSpeedKmh = m.maxSpeedKmh
-                    ws[i].routeElevationGainM = m.elevationGainM
-                    ws[i].routeElevationLossM = m.elevationLossM
+            md = await health.buildRawWorkoutExport(ws)
+        } else {
+            if mode == .full {
+                await health.ensureRouteAccess()
+                let metrics = await health.routeMetrics(for: ws.map(\.id))
+                for i in ws.indices {
+                    if let m = metrics[ws[i].id] {
+                        ws[i].routeMaxSpeedKmh = m.maxSpeedKmh
+                        ws[i].routeElevationGainM = m.elevationGainM
+                        ws[i].routeElevationLossM = m.elevationLossM
+                    }
                 }
             }
+            let snapshot = ws
+            md = await Task.detached(priority: .userInitiated) { WorkoutMarkdown.human(snapshot) }.value
         }
 
-        // Build the (potentially large) Markdown off the main thread.
-        let snapshot = ws
-        let md = await Task.detached(priority: .userInitiated) { WorkoutMarkdown.human(snapshot) }.value
         if share {
             let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd"
             let url = FileManager.default.temporaryDirectory.appendingPathComponent("Workouts-\(df.string(from: Date())).md")
@@ -365,6 +381,7 @@ struct WorkoutsView: View {
             shareItem = ShareItem(url: url)
             Haptics.success()
         } else {
+            let snapshot = ws
             let digest = await Task.detached(priority: .userInitiated) { WorkoutMarkdown.digest(snapshot) }.value
             chat = ChatPayload(title: "Workouts · \(snapshot.count)", markdown: md, digest: digest)
             Haptics.tap()
