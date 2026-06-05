@@ -20,7 +20,23 @@ struct WorkoutsView: View {
     @State private var shareItem: ShareItem?
     @State private var chat: ChatPayload?
 
-    enum ExportMode { case quick, full, raw }
+    enum ExportMode: CaseIterable, Identifiable {
+        case quick, full, raw
+        var id: Self { self }
+        var title: String {
+            switch self { case .quick: "Quick"; case .full: "Full"; case .raw: "Raw" }
+        }
+        var subtitle: String {
+            switch self {
+            case .quick: "Summary only — instant, no GPS"
+            case .full: "Summary + GPS — max speed, elevation"
+            case .raw: "Everything — incl. every GPS point"
+            }
+        }
+        var symbol: String {
+            switch self { case .quick: "bolt.fill"; case .full: "location.fill"; case .raw: "square.grid.3x3.fill" }
+        }
+    }
 
     enum DateRange: String, CaseIterable, Identifiable {
         case month, three, six, year, all, custom
@@ -91,16 +107,54 @@ struct WorkoutsView: View {
             .sheet(item: $chat) { payload in
                 ExportChatView(title: payload.title, markdown: payload.markdown, digest: payload.digest)
             }
-            .confirmationDialog("Export \(selected.count) workout\(selected.count == 1 ? "" : "s")",
-                                isPresented: $showExportModes, titleVisibility: .visible) {
-                Button("Quick — summary only") { Task { await export(mode: .quick, share: true) } }
-                Button("Full — summary + GPS (max speed, elevation)") { Task { await export(mode: .full, share: true) } }
-                Button("Raw — everything, incl. every GPS point") { Task { await export(mode: .raw, share: true) } }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("Quick is instant. Full & Raw read GPS routes — Raw can be large for big selections.")
-            }
+            .sheet(isPresented: $showExportModes) { exportModeSheet }
         }
+    }
+
+    private var exportModeSheet: some View {
+        ZStack {
+            AmbientBackground()
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Export \(selected.count) workout\(selected.count == 1 ? "" : "s")")
+                    .font(.title3.weight(.bold)).foregroundStyle(Theme.textPrimary)
+                Text("Pick how much detail to include.")
+                    .font(.subheadline).foregroundStyle(Theme.textSecondary)
+                    .padding(.bottom, 4)
+                ForEach(ExportMode.allCases) { mode in
+                    Button {
+                        showExportModes = false
+                        Task { await export(mode: mode, share: true) }
+                    } label: { exportModeCard(mode) }
+                    .buttonStyle(.plain)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(20)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+        .presentationDetents([.height(440)])
+        .presentationDragIndicator(.visible)
+    }
+
+    private func exportModeCard(_ mode: ExportMode) -> some View {
+        HStack(spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 11, style: .continuous).fill(Theme.control).frame(width: 40, height: 40)
+                Image(systemName: mode.symbol).font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.accent)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(mode.title).font(.body.weight(.semibold)).foregroundStyle(Theme.textPrimary)
+                Text(mode.subtitle).font(.footnote).foregroundStyle(Theme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer()
+            Image(systemName: "chevron.right").font(.footnote.weight(.semibold))
+                .foregroundStyle(Theme.textSecondary.opacity(0.5))
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.card))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Theme.cardStroke, lineWidth: 1))
     }
 
     // MARK: - Header (date range + type chips)
