@@ -68,21 +68,26 @@ enum WorkoutMarkdown {
         let totalDist = workouts.compactMap(\.distanceKm).reduce(0, +)
         let totalKcal = workouts.compactMap(\.energyKcal).reduce(0, +)
         if let first = workouts.first, let last = workouts.last {
-            s += "\(workouts.count) workouts from \(Fmt.shortDate(last.start)) to \(Fmt.shortDate(first.start)). "
+            s += "This export contains exactly \(workouts.count) workout\(workouts.count == 1 ? "" : "s"), from \(Fmt.shortDate(last.start)) to \(Fmt.shortDate(first.start)). "
         }
         s += "Totals: \(Fmt.duration(totalDur))"
         if totalDist > 0 { s += ", \(Fmt.plain(totalDist, precision: 1)) km" }
         if totalKcal > 0 { s += ", \(Fmt.plain(totalKcal, precision: 0)) kcal" }
         s += ".\n\n"
 
+        // Pre-compute the extremes so a small model answers "highest speed / longest"
+        // by COPYING a value, not by scanning and (badly) computing over the list.
+        s += highlights(workouts)
+
         // Many workouts won't fit the on-device model's context per-session, so
         // aggregate by activity type (still answers "estimate my VO2 max" etc.).
         guard workouts.count <= 35 else {
-            s += aggregateByType(workouts)
-            s += "\nEvery number above is exact, straight from Apple Health."
+            s += "\n" + aggregateByType(workouts)
+            s += "\nUse ONLY the exact figures above. Do not compute, combine, or re-read raw rows."
             return s
         }
 
+        s += "\nEach workout (newest first):\n"
         for w in workouts {
             let p0: (Double) -> String = { Fmt.plain($0, precision: 0) }
             let p1: (Double) -> String = { Fmt.plain($0, precision: 1) }
@@ -104,12 +109,36 @@ enum WorkoutMarkdown {
             if let ind = w.indoor { f.append(ind ? "indoor" : "outdoor") }
             if !w.lapDurations.isEmpty { f.append("\(w.lapDurations.count) laps") }
             if let src = w.sourceName { f.append("via \(src)") }
-            s += "- \(w.activityName), \(Fmt.dateTime(w.start)), \(Fmt.duration(w.duration))"
+            s += "- \(w.activityName), \(digestDate(w.start)), \(Fmt.duration(w.duration))"
             if !f.isEmpty { s += ": " + f.joined(separator: ", ") }
             s += ".\n"
         }
-        s += "\nEvery number above is exact, straight from Apple Health."
+        s += "\nUse ONLY the exact figures above (copy them verbatim). Do not invent, round, or recompute numbers or dates."
         return s
+    }
+
+    /// Unambiguous date for the model — no locale quirks, no "at", no commas.
+    private static let dtFormatter: DateFormatter = {
+        let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = "yyyy-MM-dd HH:mm"; return f
+    }()
+    private static func digestDate(_ d: Date) -> String { dtFormatter.string(from: d) }
+
+    /// Pre-computed extremes — so the model copies an answer instead of computing.
+    private static func highlights(_ ws: [WorkoutDetail]) -> String {
+        var lines: [String] = []
+        func add(_ label: String, _ key: (WorkoutDetail) -> Double?, _ fmt: (Double) -> String) {
+            let picks = ws.compactMap { w -> (Double, WorkoutDetail)? in key(w).map { ($0, w) } }
+            guard let top = picks.max(by: { $0.0 < $1.0 }), top.0 > 0 else { return }
+            lines.append("- \(label): \(fmt(top.0)) — \(top.1.activityName), \(digestDate(top.1.start))")
+        }
+        add("Longest", { $0.duration }, { Fmt.duration($0) })
+        add("Farthest", { $0.distanceKm }, { "\(Fmt.plain($0, precision: 2)) km" })
+        add("Fastest avg speed", { $0.avgSpeedKmh }, { "\(Fmt.plain($0, precision: 1)) km/h" })
+        add("Top speed", { $0.bestMaxSpeedKmh }, { "\(Fmt.plain($0, precision: 1)) km/h" })
+        add("Highest avg HR", { $0.avgHeartRate }, { "\(Int($0.rounded())) bpm" })
+        add("Most ascent", { $0.bestElevationGainM }, { "\(Fmt.plain($0, precision: 0)) m" })
+        add("Most calories", { $0.energyKcal }, { "\(Fmt.plain($0, precision: 0)) kcal" })
+        return lines.isEmpty ? "" : "Highlights (already computed — use these for max/longest/fastest questions):\n" + lines.joined(separator: "\n") + "\n"
     }
 
     /// Per-activity-type rollup for the chat digest of a large selection.
