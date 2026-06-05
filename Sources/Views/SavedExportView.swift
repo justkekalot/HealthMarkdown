@@ -17,6 +17,13 @@ struct SavedExportView: View {
         ByteCountFormatter.string(fromByteCount: Int64(max(markdown.utf8.count, 0)), countStyle: .file)
     }
 
+    /// Workout exports: "Cycling ×57" + the date span — clearer than data points.
+    private var workoutDetail: String? {
+        guard record.isWorkout else { return nil }
+        let parts = [record.contents, record.period].compactMap { $0 }.filter { !$0.isEmpty }
+        return parts.isEmpty ? nil : parts.joined(separator: "\n")
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -30,6 +37,7 @@ struct SavedExportView: View {
                         byteSize: byteSize,
                         statLeft: ("\(record.dataPoints)", "data points"),
                         statRight: ("\(record.sectionCount)", "sections"),
+                        detail: workoutDetail,
                         onChat: { showChat = true },
                         onShare: { showShare = true },
                         onCopy: { copyToClipboard() },

@@ -94,6 +94,9 @@ struct ExportSummaryCard: View {
     let byteSize: String
     let statLeft: (String, String)
     let statRight: (String, String)
+    /// When set (workout exports), shown instead of the two-stat box — a plain
+    /// description like "Cycling ×57\n14 Jun 2020 – 14 Jun 2026".
+    var detail: String? = nil
     let onChat: () -> Void
     let onShare: () -> Void
     let onCopy: () -> Void
@@ -116,13 +119,23 @@ struct ExportSummaryCard: View {
                         .font(.subheadline).foregroundStyle(Theme.textSecondary)
                 }
 
-                HStack(spacing: 14) {
-                    stat(statLeft)
-                    Divider().frame(height: 32).overlay(Theme.cardStroke)
-                    stat(statRight)
+                if let detail {
+                    Text(detail)
+                        .font(.subheadline).foregroundStyle(Theme.textPrimary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.vertical, 14).padding(.horizontal, 22)
+                        .frame(maxWidth: .infinity)
+                        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.control))
+                } else {
+                    HStack(spacing: 14) {
+                        stat(statLeft)
+                        Divider().frame(height: 32).overlay(Theme.cardStroke)
+                        stat(statRight)
+                    }
+                    .padding(.vertical, 14).padding(.horizontal, 22)
+                    .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.control))
                 }
-                .padding(.vertical, 14).padding(.horizontal, 22)
-                .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.control))
 
                 VStack(spacing: 10) {
                     Button(action: onChat) {

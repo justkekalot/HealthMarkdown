@@ -377,6 +377,15 @@ struct WorkoutsView: View {
         return parts.joined(separator: ", ") + (sorted.count > 4 ? " +\(sorted.count - 4)" : "")
     }
 
+    /// The workouts' date span, e.g. "14 Jun 2020 – 14 Jun 2026" (or one date).
+    private static func periodText(_ ws: [WorkoutDetail]) -> String {
+        let dates = ws.map(\.start)
+        guard let lo = dates.min(), let hi = dates.max() else { return "" }
+        return Calendar.current.isDate(lo, inSameDayAs: hi)
+            ? Fmt.shortDate(lo)
+            : "\(Fmt.shortDate(lo)) – \(Fmt.shortDate(hi))"
+    }
+
     // MARK: - States
 
     private var emptyState: some View {
@@ -491,7 +500,8 @@ struct WorkoutsView: View {
             let digest = await Task.detached(priority: .userInitiated) { WorkoutMarkdown.digest(snapshot) }.value
             if Task.isCancelled { return }
             exports.saveWorkout(markdown: md, digest: digest, workoutCount: snapshot.count,
-                                contents: Self.contentsSummary(snapshot), mode: mode.asExportMode, createdAt: Date())
+                                contents: Self.contentsSummary(snapshot), period: Self.periodText(snapshot),
+                                mode: mode.asExportMode, createdAt: Date())
             exportProgress = 1
             shareItem = ShareItem(url: url)
             Haptics.success()

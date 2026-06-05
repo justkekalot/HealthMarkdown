@@ -17,6 +17,8 @@ struct ExportRecord: Identifiable, Codable, Equatable {
     var kind: ExportKind? = nil
     /// For workout exports: which activities are inside, e.g. "Running ×3, Walking".
     var contents: String? = nil
+    /// For workout exports: the date span of the workouts, e.g. "14 Jun 2020 – 14 Jun 2026".
+    var period: String? = nil
 
     var isWorkout: Bool { kind == .workout }
 
