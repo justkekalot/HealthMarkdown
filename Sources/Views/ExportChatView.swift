@@ -16,14 +16,20 @@ struct ExportChatView: View {
     @State private var thinking = false
     @State private var genTask: Task<Void, Never>?
 
-    /// Models have a bounded context window; a Full/Raw export can be MBs. Cap
-    /// the document to leave room for the prompt scaffold + a full answer inside
-    /// the engine's token budget (~22k chars ≈ 5.5k tokens of the 8192 window).
-    private static let maxChars = 22_000
-    /// Only the Markdown-fallback path can be truncated; the digest is compact.
-    private var truncated: Bool { digest == nil && markdown.count > Self.maxChars }
+    /// Models have a bounded context window; a Full/Raw export can be MBs, and
+    /// even the digest can blow past the limit (e.g. 67 workouts). Dense numeric
+    /// data tokenizes at ~2.7 chars/token, so cap to ~12k chars (≈4.4k tokens),
+    /// leaving room for the prompt scaffold, the question and a full answer
+    /// inside the 8192 window. Applies to BOTH the digest and the Markdown.
+    private static let maxChars = 12_000
+    private var truncated: Bool { (digest ?? markdown).count > Self.maxChars }
     private var documentForModel: String {
-        digest ?? Self.fit(markdown, to: Self.maxChars)
+        let raw = digest ?? markdown
+        guard raw.count > Self.maxChars else { return raw }
+        // Section-aware trim for Markdown; head-trim with a marker for a digest.
+        return digest == nil
+            ? Self.fit(raw, to: Self.maxChars)
+            : String(raw.prefix(Self.maxChars)) + "\n…(truncated to fit the on-device model's memory)"
     }
 
     /// Shrink a too-big export to fit the window **without dropping whole metrics**.

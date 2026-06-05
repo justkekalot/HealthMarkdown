@@ -75,6 +75,14 @@ enum WorkoutMarkdown {
         if totalKcal > 0 { s += ", \(Fmt.plain(totalKcal, precision: 0)) kcal" }
         s += ".\n\n"
 
+        // Many workouts won't fit the on-device model's context per-session, so
+        // aggregate by activity type (still answers "estimate my VO2 max" etc.).
+        guard workouts.count <= 35 else {
+            s += aggregateByType(workouts)
+            s += "\nEvery number above is exact, straight from Apple Health."
+            return s
+        }
+
         for w in workouts {
             let p0: (Double) -> String = { Fmt.plain($0, precision: 0) }
             let p1: (Double) -> String = { Fmt.plain($0, precision: 1) }
@@ -101,6 +109,32 @@ enum WorkoutMarkdown {
             s += ".\n"
         }
         s += "\nEvery number above is exact, straight from Apple Health."
+        return s
+    }
+
+    /// Per-activity-type rollup for the chat digest of a large selection.
+    private static func aggregateByType(_ workouts: [WorkoutDetail]) -> String {
+        var order: [String] = [], groups: [String: [WorkoutDetail]] = [:]
+        for w in workouts {
+            if groups[w.activityName] == nil { order.append(w.activityName) }
+            groups[w.activityName, default: []].append(w)
+        }
+        var s = "By activity type:\n"
+        for name in order.sorted(by: { groups[$0]!.count > groups[$1]!.count }) {
+            let g = groups[name]!
+            let dur = g.reduce(0) { $0 + $1.duration }
+            let dist = g.compactMap(\.distanceKm).reduce(0, +)
+            let kcal = g.compactMap(\.energyKcal).reduce(0, +)
+            let hrs = g.compactMap(\.avgHeartRate)
+            var f = ["\(g.count) session\(g.count == 1 ? "" : "s")", Fmt.duration(dur)]
+            if dist > 0 { f.append("\(Fmt.plain(dist, precision: 1)) km") }
+            if kcal > 0 { f.append("\(Fmt.plain(kcal, precision: 0)) kcal") }
+            if dist > 0, dur > 0 { f.append("avg pace \(pace((dur / 60) / dist)) /km") }
+            if !hrs.isEmpty { f.append("avg HR \(Int((hrs.reduce(0, +) / Double(hrs.count)).rounded()))") }
+            if let mx = g.compactMap(\.maxHeartRate).max() { f.append("max HR \(Int(mx.rounded()))") }
+            if let el = g.compactMap(\.bestElevationGainM).max(), el > 0 { f.append("up to \(Fmt.plain(el, precision: 0)) m ascent") }
+            s += "- \(name): " + f.joined(separator: ", ") + ".\n"
+        }
         return s
     }
 

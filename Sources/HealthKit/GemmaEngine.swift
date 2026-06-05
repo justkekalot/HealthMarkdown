@@ -27,7 +27,11 @@ actor GemmaEngine: LLMEngine {
     static let maxTokens = 8192
 
     /// Rough token estimate for the UI gauge (~4 chars/token for English/Markdown).
-    static func estimateTokens(_ text: String) -> Int { max(1, text.count / 4) }
+    /// Rough upper-ish estimate. Dense numeric/tabular exports tokenize to far
+    /// more tokens than prose (closer to ~2.7 chars/token than 4), so we lean
+    /// conservative — the "Memory" gauge should never read half-full when the
+    /// real input is already over the limit.
+    static func estimateTokens(_ text: String) -> Int { max(1, Int(Double(text.count) / 2.7)) }
 
     private func ensureLoaded() async throws {
         guard engine == nil else { return }
