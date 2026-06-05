@@ -299,8 +299,9 @@ struct WorkoutsView: View {
         } label: {
             HStack(spacing: 14) {
                 ZStack {
-                    Circle().fill(Theme.controlStrong).frame(width: 40, height: 40)
-                    Image(systemName: w.symbol).font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.accent)
+                    Circle().fill(isOn ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(Theme.controlStrong)).frame(width: 40, height: 40)
+                    Image(systemName: w.symbol).font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(isOn ? Color.white : Theme.accent)
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(w.activityName).font(.subheadline.weight(.semibold)).foregroundStyle(Theme.textPrimary)
@@ -316,7 +317,8 @@ struct WorkoutsView: View {
                     .foregroundStyle(isOn ? Theme.accent : Theme.textSecondary.opacity(0.4))
             }
             .padding(12)
-            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.surface))
+            .background(RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(isOn ? AnyShapeStyle(Theme.subtleGradient) : AnyShapeStyle(Theme.surface)))
             .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(isOn ? Theme.accent.opacity(0.6) : Theme.cardStroke, lineWidth: isOn ? 1.5 : 1))
             .shadow(color: Theme.hairline.opacity(0.06), radius: 10, x: 0, y: 5)
