@@ -299,7 +299,7 @@ struct WorkoutsView: View {
         } label: {
             HStack(spacing: 14) {
                 ZStack {
-                    Circle().fill(Theme.accent.opacity(0.12)).frame(width: 40, height: 40)
+                    Circle().fill(Theme.controlStrong).frame(width: 40, height: 40)
                     Image(systemName: w.symbol).font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.accent)
                 }
                 VStack(alignment: .leading, spacing: 2) {
