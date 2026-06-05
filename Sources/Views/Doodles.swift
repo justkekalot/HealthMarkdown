@@ -4,7 +4,7 @@ import SwiftUI
 /// scale crisply and tint with the accent. Strokes are deliberately wobbly and
 /// double-passed for a real sketchbook-doodle feel — not clean geometry.
 struct Doodle: View {
-    enum Kind { case heartToDoc, privacy, askAI }
+    enum Kind { case heartToDoc, workouts, privacy, askAI }
     let kind: Kind
     var color: Color = Theme.accent
 
@@ -54,6 +54,22 @@ struct Doodle: View {
                     let ly = dy + dh*(0.32 + Double(i)*0.2)
                     sketch([CGPoint(x: dx+dw*0.18, y: ly), CGPoint(x: dx+dw*0.82, y: ly)], seed: 10+i, width: lw*0.75)
                 }
+
+            case .workouts:
+                // A GPS route with a start dot and a destination pin.
+                let route = [
+                    CGPoint(x: w*0.14, y: h*0.70), CGPoint(x: w*0.30, y: h*0.44),
+                    CGPoint(x: w*0.46, y: h*0.66), CGPoint(x: w*0.60, y: h*0.40),
+                ]
+                sketch(route, seed: 1)
+                sketch(arcPts(center: route[0], r: w*0.028, from: 0, to: 360, steps: 12), seed: 2, closed: true, width: lw*0.9)
+                // Pin: round head, a point below, a centre dot.
+                let head = CGPoint(x: w*0.74, y: h*0.30); let r = w*0.085
+                sketch(arcPts(center: head, r: r, from: 0, to: 360, steps: 18), seed: 3, closed: true)
+                sketch([CGPoint(x: head.x - r*0.72, y: head.y + r*0.7),
+                        CGPoint(x: head.x, y: head.y + r*1.9),
+                        CGPoint(x: head.x + r*0.72, y: head.y + r*0.7)], seed: 4)
+                sketch(arcPts(center: head, r: w*0.022, from: 0, to: 360, steps: 8), seed: 5, closed: true, width: lw*0.8)
 
             case .privacy:
                 let px = w*0.33, py = h*0.15, pw = w*0.34, ph = h*0.62

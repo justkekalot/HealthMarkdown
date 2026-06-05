@@ -18,12 +18,15 @@ struct IntroCarousel: View {
         .init(doodle: .heartToDoc,
               title: "Health, into one file",
               body: "HealthMarkdown turns everything in Apple Health into a single clean Markdown document."),
+        .init(doodle: .workouts,
+              title: "Every workout, in detail",
+              body: "Pick your workouts and export them with the full data — heart rate, splits, even GPS routes with max speed and elevation."),
         .init(doodle: .privacy,
               title: "Private by design",
               body: "It's all read on your device. Nothing is uploaded or shared — unless you choose to."),
         .init(doodle: .askAI,
-              title: "Made for your AI",
-              body: "Hand the file to ChatGPT or Claude, or ask the on-device model how ready you are today."),
+              title: "Ask Gemma, on-device",
+              body: "Chat about your readiness or any export with Google's Gemma — running fully offline on your phone. Or hand the file to ChatGPT or Claude."),
     ]
 
     var body: some View {
