@@ -132,7 +132,10 @@ struct WorkoutsView: View {
                     showExportModes = false
                     Task { await export(mode: exportMode, share: true) }
                 } label: {
-                    Text("Export").frame(maxWidth: .infinity)
+                    HStack {
+                        Image(systemName: "sparkles")
+                        Text("Generate \(exportMode.title) export")
+                    }
                 }
                 .buttonStyle(PrimaryButtonStyle())
             }
