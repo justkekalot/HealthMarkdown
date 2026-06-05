@@ -390,6 +390,18 @@ struct WorkoutsView: View {
 
     private func cancelExport() { exportTask?.cancel() }
 
+    /// A short "which activities" summary for a saved export, e.g. "Running ×3, Walking".
+    private static func contentsSummary(_ ws: [WorkoutDetail]) -> String {
+        var order: [String] = [], counts: [String: Int] = [:]
+        for w in ws {
+            if counts[w.activityName] == nil { order.append(w.activityName) }
+            counts[w.activityName, default: 0] += 1
+        }
+        let sorted = order.sorted { counts[$0]! > counts[$1]! }
+        let parts = sorted.prefix(4).map { counts[$0]! == 1 ? $0 : "\($0) ×\(counts[$0]!)" }
+        return parts.joined(separator: ", ") + (sorted.count > 4 ? " +\(sorted.count - 4)" : "")
+    }
+
     // MARK: - States
 
     private var emptyState: some View {
@@ -504,7 +516,7 @@ struct WorkoutsView: View {
             let digest = await Task.detached(priority: .userInitiated) { WorkoutMarkdown.digest(snapshot) }.value
             if Task.isCancelled { return }
             exports.saveWorkout(markdown: md, digest: digest, workoutCount: snapshot.count,
-                                mode: mode.asExportMode, createdAt: Date())
+                                contents: Self.contentsSummary(snapshot), mode: mode.asExportMode, createdAt: Date())
             exportProgress = 1
             shareItem = ShareItem(url: url)
             Haptics.success()

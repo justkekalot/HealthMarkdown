@@ -90,9 +90,11 @@ private struct ExportRow: View {
     let sizeText: String
 
     private var detail: String {
-        record.isWorkout
-            ? sizeText
-            : "\(record.dataPoints) data points · \(record.sectionCount) sections · \(sizeText)"
+        if record.isWorkout {
+            if let c = record.contents, !c.isEmpty { return "\(c) · \(sizeText)" }
+            return sizeText
+        }
+        return "\(record.dataPoints) data points · \(record.sectionCount) sections · \(sizeText)"
     }
 
     var body: some View {

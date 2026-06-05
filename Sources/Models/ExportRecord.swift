@@ -15,6 +15,8 @@ struct ExportRecord: Identifiable, Codable, Equatable {
     let fileName: String   // e.g. "<uuid>.md"
     /// nil on records saved before workout exports existed → treat as .health.
     var kind: ExportKind? = nil
+    /// For workout exports: which activities are inside, e.g. "Running ×3, Walking".
+    var contents: String? = nil
 
     var isWorkout: Bool { kind == .workout }
 

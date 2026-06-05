@@ -70,7 +70,7 @@ final class ExportStore: ObservableObject {
 
     /// Saves a workout export (Markdown + model digest) to History.
     @discardableResult
-    func saveWorkout(markdown: String, digest: String, workoutCount: Int, mode: ExportMode, createdAt: Date) -> ExportRecord {
+    func saveWorkout(markdown: String, digest: String, workoutCount: Int, contents: String, mode: ExportMode, createdAt: Date) -> ExportRecord {
         let id = UUID()
         let fileName = "\(id.uuidString).md"
         try? markdown.data(using: .utf8)?.write(to: dir.appendingPathComponent(fileName), options: .atomic)
@@ -79,7 +79,7 @@ final class ExportStore: ObservableObject {
         let record = ExportRecord(
             id: id, createdAt: createdAt, mode: mode,
             rangeTitle: "\(workoutCount) workout\(workoutCount == 1 ? "" : "s")",
-            dataPoints: workoutCount, sectionCount: 0, fileName: fileName, kind: .workout)
+            dataPoints: workoutCount, sectionCount: 0, fileName: fileName, kind: .workout, contents: contents)
         records.insert(record, at: 0)
         persistIndex()
         return record
