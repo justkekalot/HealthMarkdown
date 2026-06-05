@@ -102,11 +102,11 @@ private struct ExportRow: View {
             HStack(spacing: 14) {
                 ZStack {
                     Circle()
-                        .fill(Theme.heroGradient)
+                        .fill(Theme.accent.opacity(0.12))
                         .frame(width: 46, height: 46)
                     Image(systemName: record.isWorkout ? "figure.run" : record.mode.symbol)
                         .font(.system(size: 19, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Theme.accent)
                 }
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
