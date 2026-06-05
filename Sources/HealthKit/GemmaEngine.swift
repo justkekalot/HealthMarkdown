@@ -66,20 +66,27 @@ actor GemmaEngine: LLMEngine {
     }
 
     private var contextSent = false
+    /// The context the active conversation was started with. The engine is cached
+    /// and reused across screens, so without this a recovery-chat conversation
+    /// would carry over into an export chat (and vice-versa) — the model kept
+    /// answering "about your recovery" inside an export. When the context differs,
+    /// start a fresh conversation so the right data is sent.
+    private var activeContext: String?
 
-    /// Reuse one conversation across turns (chat memory). The context (recovery
-    /// data / export) is folded into the FIRST user message — system messages
-    /// are unreliable in the LiteRT-LM preview, which is why "Gemma doesn't see
-    /// the file" happened. Later turns send just the question, so memory holds.
+    /// Reuse one conversation across turns of the SAME chat (memory); start a new
+    /// one when the context changes. The context (recovery data / export) is
+    /// folded into the FIRST user message — system messages are unreliable in the
+    /// LiteRT-LM preview, which is why "Gemma doesn't see the file" happened.
     private func ask(question: String, systemContext: String, onToken: @escaping @Sendable (String) -> Void) async -> String {
         do {
             try await ensureLoaded()
             guard let engine else { return "The model isn't loaded." }
-            if conversation == nil {
+            if conversation == nil || systemContext != activeContext {
                 let config = ConversationConfig(
                     samplerConfig: try SamplerConfig(topK: 1, topP: 1.0, temperature: 0.0)
                 )
                 conversation = try await engine.createConversation(with: config)
+                activeContext = systemContext
                 contextSent = false
             }
             guard let conversation else { return "The model isn't ready." }
