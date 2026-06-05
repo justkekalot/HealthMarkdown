@@ -31,7 +31,7 @@ struct DashboardView: View {
                 AmbientBackground()
                 ScrollView {
                     VStack(alignment: .leading, spacing: 26) {
-                        ScreenHeader(title: "Export", subtitle: "Apple Health → Markdown")
+                        ScreenHeader(title: "Health", subtitle: "Apple Health → Markdown")
 
                         stepHeader(1, "What to export")
                         modeSelector

@@ -51,7 +51,7 @@ struct MainTabView: View {
 
             DashboardView()
                 .tabItem {
-                    Label("Export", image: "tab-export")
+                    Label("Health", image: "tab-export")
                 }
                 .tag(1)
 
