@@ -17,6 +17,7 @@ struct WorkoutsView: View {
     @State private var loading = true
     @State private var exporting = false
     @State private var showExportModes = false
+    @State private var exportMode: ExportMode = .full
     @State private var shareItem: ShareItem?
     @State private var chat: ChatPayload?
 
@@ -122,25 +123,34 @@ struct WorkoutsView: View {
                     .padding(.bottom, 4)
                 ForEach(ExportMode.allCases) { mode in
                     Button {
-                        showExportModes = false
-                        Task { await export(mode: mode, share: true) }
-                    } label: { exportModeCard(mode) }
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) { exportMode = mode }
+                    } label: { exportModeCard(mode, selected: exportMode == mode) }
                     .buttonStyle(.plain)
                 }
-                Spacer(minLength: 0)
+                Spacer(minLength: 6)
+                Button {
+                    showExportModes = false
+                    Task { await export(mode: exportMode, share: true) }
+                } label: {
+                    Text("Export").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(PrimaryButtonStyle())
             }
             .padding(20)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .presentationDetents([.height(440)])
+        .presentationDetents([.height(508)])
         .presentationDragIndicator(.visible)
     }
 
-    private func exportModeCard(_ mode: ExportMode) -> some View {
+    private func exportModeCard(_ mode: ExportMode, selected: Bool) -> some View {
         HStack(spacing: 14) {
             ZStack {
-                RoundedRectangle(cornerRadius: 11, style: .continuous).fill(Theme.control).frame(width: 40, height: 40)
-                Image(systemName: mode.symbol).font(.system(size: 17, weight: .semibold)).foregroundStyle(Theme.accent)
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .fill(selected ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(Theme.control))
+                    .frame(width: 40, height: 40)
+                Image(systemName: mode.symbol).font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(selected ? Color.white : Theme.accent)
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(mode.title).font(.body.weight(.semibold)).foregroundStyle(Theme.textPrimary)
@@ -148,13 +158,16 @@ struct WorkoutsView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer()
-            Image(systemName: "chevron.right").font(.footnote.weight(.semibold))
-                .foregroundStyle(Theme.textSecondary.opacity(0.5))
+            Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                .font(.system(size: 20))
+                .foregroundStyle(selected ? Theme.accent : Theme.textSecondary.opacity(0.4))
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.card))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Theme.cardStroke, lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .fill(selected ? Theme.subtleGradient : LinearGradient(colors: [Theme.card], startPoint: .top, endPoint: .bottom)))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .stroke(selected ? Theme.accent.opacity(0.6) : Theme.cardStroke, lineWidth: 1))
     }
 
     // MARK: - Header (date range + type chips)
