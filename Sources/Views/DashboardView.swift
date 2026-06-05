@@ -49,6 +49,12 @@ struct DashboardView: View {
                     .padding(.bottom, 40)
                 }
                 .scrollIndicators(.hidden)
+
+                if isFetching, case let .fetching(progress, label) = health.phase {
+                    ExportProgressOverlay(progress: progress,
+                                          status: progress >= 1 ? label : "Reading \(label)…",
+                                          onCancel: { generateTask?.cancel() })
+                }
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.hidden, for: .navigationBar)
@@ -198,9 +204,7 @@ struct DashboardView: View {
 
     @ViewBuilder
     private var actionArea: some View {
-        if isFetching, case let .fetching(progress, label) = health.phase {
-            progressCard(progress: progress, label: label)
-        } else if let record = freshRecord, let report = health.lastReport {
+        if let record = freshRecord, let report = health.lastReport {
             resultCard(record: record, report: report)
         } else {
             generateButton
@@ -244,40 +248,6 @@ struct DashboardView: View {
         }
     }
 
-    private func progressCard(progress: Double, label: String) -> some View {
-        GlassCard {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack {
-                    ProgressView().tint(Theme.accent)
-                    // The final formatting step supplies a full sentence; the
-                    // per-metric fetch steps are bare names, so prefix "Reading".
-                    Text(progress >= 1 ? label : "Reading \(label)…")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(Theme.textPrimary)
-                    Spacer()
-                    Text("\(Int(progress * 100))%")
-                        .font(.subheadline.monospacedDigit())
-                        .foregroundStyle(Theme.textSecondary)
-                }
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(Theme.control)
-                        Capsule()
-                            .fill(Theme.accent)
-                            .frame(width: max(8, geo.size.width * progress))
-                            .animation(.easeInOut(duration: 0.3), value: progress)
-                    }
-                }
-                .frame(height: 8)
-                Button(role: .destructive) {
-                    generateTask?.cancel()
-                } label: {
-                    Text("Cancel export").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered).tint(Theme.accent)
-            }
-        }
-    }
 
     private func resultCard(record: ExportRecord, report: HealthReport) -> some View {
         GlassCard {

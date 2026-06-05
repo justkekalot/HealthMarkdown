@@ -360,32 +360,7 @@ struct WorkoutsView: View {
     }
 
     private var progressOverlay: some View {
-        ZStack {
-            Color.black.opacity(0.5).ignoresSafeArea()
-            VStack(alignment: .leading, spacing: 16) {
-                HStack(spacing: 12) {
-                    Image(systemName: "square.and.arrow.up.fill").font(.title3).foregroundStyle(Theme.accent)
-                    Text("Building export").font(.headline).foregroundStyle(Theme.textPrimary)
-                    Spacer()
-                    Text("\(Int(exportProgress * 100))%")
-                        .font(.subheadline.monospacedDigit().weight(.semibold)).foregroundStyle(Theme.textSecondary)
-                }
-                ProgressView(value: min(max(exportProgress, 0.02), 1)).tint(Theme.accent)
-                Text(exportStatus.isEmpty ? "Preparing…" : exportStatus)
-                    .font(.subheadline).foregroundStyle(Theme.textSecondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Button(role: .destructive) { cancelExport() } label: {
-                    Text("Cancel export").frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered).tint(Theme.accent)
-            }
-            .padding(22)
-            .frame(maxWidth: 330)
-            .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Theme.bg))
-            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Theme.cardStroke, lineWidth: 1))
-            .shadow(color: .black.opacity(0.3), radius: 24, y: 10)
-            .padding(40)
-        }
+        ExportProgressOverlay(progress: exportProgress, status: exportStatus, onCancel: cancelExport)
     }
 
     private func cancelExport() { exportTask?.cancel() }
