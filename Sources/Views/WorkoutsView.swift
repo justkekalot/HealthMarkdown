@@ -357,8 +357,12 @@ struct WorkoutsView: View {
             }
         }
         .disabled(exporting)
-        .padding(.horizontal, 16).padding(.vertical, 12)
-        .background(.ultraThinMaterial)
+        .padding(.horizontal, 18).padding(.vertical, 11)
+        // A floating frosted (Gaussian-blur) panel so the list is visibly behind it.
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).stroke(Theme.cardStroke, lineWidth: 1))
+        .shadow(color: Theme.hairline.opacity(0.12), radius: 16, x: 0, y: 6)
+        .padding(.horizontal, 16).padding(.bottom, 4)
     }
 
     private var progressOverlay: some View {
