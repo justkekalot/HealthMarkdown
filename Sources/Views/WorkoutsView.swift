@@ -81,20 +81,6 @@ struct WorkoutsView: View {
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.hidden, for: .navigationBar)
-            .toolbar {
-                if !workouts.isEmpty {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        let ids = Set(filtered.map(\.id))
-                        let allSelected = !ids.isEmpty && ids.isSubset(of: selected)
-                        Button(allSelected ? "Clear" : "Select all") {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                if allSelected { selected.subtract(ids) } else { selected.formUnion(ids) }
-                            }
-                        }
-                        .foregroundStyle(Theme.accent)
-                    }
-                }
-            }
             .task { await load() }
             .safeAreaInset(edge: .bottom) { if !selected.isEmpty { exportBar } }
             .sheet(item: $shareItem) { ShareSheet(items: [$0.url]) }
@@ -128,10 +114,29 @@ struct WorkoutsView: View {
             }
             Spacer()
             if !workouts.isEmpty {
-                Text("\(workouts.count) total").font(.caption).foregroundStyle(Theme.textSecondary)
+                Button { toggleSelectAll() } label: {
+                    Text(allFilteredSelected ? "Clear" : "Select all")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Theme.accent)
+                        .padding(.vertical, 9).padding(.horizontal, 14)
+                        .background(Capsule().fill(Theme.control))
+                        .overlay(Capsule().stroke(Theme.cardStroke, lineWidth: 1))
+                }
             }
         }
         .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 6)
+    }
+
+    private var allFilteredSelected: Bool {
+        let ids = Set(filtered.map(\.id))
+        return !ids.isEmpty && ids.isSubset(of: selected)
+    }
+
+    private func toggleSelectAll() {
+        let ids = Set(filtered.map(\.id))
+        withAnimation(.easeInOut(duration: 0.2)) {
+            if allFilteredSelected { selected.subtract(ids) } else { selected.formUnion(ids) }
+        }
     }
 
     private var rangeLabel: String {
