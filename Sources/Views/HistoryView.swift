@@ -101,7 +101,7 @@ private struct ExportRow: View {
         GlassCard(padding: 16) {
             HStack(spacing: 14) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    Circle()
                         .fill(Theme.heroGradient)
                         .frame(width: 46, height: 46)
                     Image(systemName: record.isWorkout ? "figure.run" : record.mode.symbol)

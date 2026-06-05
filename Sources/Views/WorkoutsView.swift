@@ -298,11 +298,10 @@ struct WorkoutsView: View {
             Haptics.tap()
         } label: {
             HStack(spacing: 14) {
-                Image(systemName: w.symbol)
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(Theme.accent)
-                    .frame(width: 34, height: 34)
-                    .background(Circle().fill(Theme.accent.opacity(0.12)))
+                ZStack {
+                    Circle().fill(Theme.heroGradient).frame(width: 40, height: 40)
+                    Image(systemName: w.symbol).font(.system(size: 17, weight: .semibold)).foregroundStyle(.white)
+                }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(w.activityName).font(.subheadline.weight(.semibold)).foregroundStyle(Theme.textPrimary)
                     Text("\(Fmt.dateTime(w.start)) · \(Fmt.duration(w.duration))")
@@ -317,9 +316,10 @@ struct WorkoutsView: View {
                     .foregroundStyle(isOn ? Theme.accent : Theme.textSecondary.opacity(0.4))
             }
             .padding(12)
-            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.control))
-            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(isOn ? Theme.accent.opacity(0.5) : Theme.cardStroke, lineWidth: isOn ? 1.5 : 1))
+            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.surface))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(isOn ? Theme.accent.opacity(0.6) : Theme.cardStroke, lineWidth: isOn ? 1.5 : 1))
+            .shadow(color: Theme.hairline.opacity(0.06), radius: 10, x: 0, y: 5)
         }
         .buttonStyle(.plain)
     }
