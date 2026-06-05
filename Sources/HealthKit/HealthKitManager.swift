@@ -604,6 +604,25 @@ final class HealthKitManager: ObservableObject {
         return md
     }
 
+    /// A GPX 1.1 file for the selected workouts' GPS routes. Streams per workout
+    /// so only one route's points are in memory at a time. Off-main (nonisolated).
+    nonisolated func buildGPX(_ workouts: [WorkoutDetail], onProgress: @Sendable (Int, Int) -> Void = { _, _ in }) async -> String {
+        let byID = await workoutsByID(workouts.map(\.id))
+        let total = workouts.count
+        var s = WorkoutGPX.header
+        var done = 0
+        for w in workouts {
+            if Task.isCancelled { break }
+            if let hk = byID[w.id] {
+                let locs = await locations(for: hk)
+                if !locs.isEmpty { s += WorkoutGPX.track(for: w, points: locs) }
+            }
+            done += 1
+            onProgress(done, total)
+        }
+        return s + WorkoutGPX.footer
+    }
+
     nonisolated private func locations(for workout: HKWorkout) async -> [CLLocation] {
         let routes: [HKWorkoutRoute] = await withCheckedContinuation { cont in
             let q = HKSampleQuery(sampleType: HKSeriesType.workoutRoute(),

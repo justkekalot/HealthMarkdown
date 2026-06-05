@@ -26,24 +26,28 @@ struct WorkoutsView: View {
     @State private var chat: ChatPayload?
 
     enum WorkoutExportMode: CaseIterable, Identifiable {
-        case quick, full, raw
+        case quick, full, raw, gpx
         var id: Self { self }
         var title: String {
-            switch self { case .quick: "Quick"; case .full: "Full"; case .raw: "Raw" }
+            switch self { case .quick: "Quick"; case .full: "Full"; case .raw: "Raw"; case .gpx: "GPX" }
         }
         var subtitle: String {
             switch self {
             case .quick: "Summary only — instant, no GPS"
             case .full: "Summary + GPS — max speed, elevation"
             case .raw: "Everything — incl. every GPS point"
+            case .gpx: "Pure GPS track (.gpx) — for Strava, Garmin, maps"
             }
         }
         var symbol: String {
-            switch self { case .quick: "bolt.fill"; case .full: "location.fill"; case .raw: "square.grid.3x3.fill" }
+            switch self {
+            case .quick: "bolt.fill"; case .full: "location.fill"
+            case .raw: "square.grid.3x3.fill"; case .gpx: "antenna.radiowaves.left.and.right"
+            }
         }
-        /// The shared ExportMode this maps to, for History records.
+        /// The shared ExportMode this maps to, for History records (GPX isn't saved).
         var asExportMode: ExportMode {
-            switch self { case .quick: .quick; case .full: .full; case .raw: .raw }
+            switch self { case .quick: .quick; case .full: .full; case .raw, .gpx: .raw }
         }
     }
 
@@ -150,7 +154,7 @@ struct WorkoutsView: View {
             .padding(20)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .presentationDetents([.height(508)])
+        .presentationDetents([.height(580)])
         .presentationDragIndicator(.visible)
     }
 
@@ -454,6 +458,28 @@ struct WorkoutsView: View {
         exportProgress = 0
         exportStatus = "Preparing…"
         defer { exporting = false }
+
+        // GPX is a standalone .gpx file (GPS track only) — not Markdown, not saved.
+        if mode == .gpx {
+            exportStatus = "Reading GPS routes…"
+            await health.ensureRouteAccess()
+            if Task.isCancelled { return }
+            let snap = selectedWorkouts
+            let gpx = await health.buildGPX(snap) { done, total in
+                Task { @MainActor in
+                    exportProgress = total > 0 ? 0.95 * Double(done) / Double(total) : 0.5
+                    exportStatus = "Reading GPS routes (\(done)/\(total))"
+                }
+            }
+            if Task.isCancelled { return }
+            exportProgress = 1
+            let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd"
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("Workouts-\(df.string(from: Date())).gpx")
+            try? gpx.data(using: .utf8)?.write(to: url)
+            shareItem = ShareItem(url: url)
+            Haptics.success()
+            return
+        }
 
         var ws = selectedWorkouts
         let md: String
