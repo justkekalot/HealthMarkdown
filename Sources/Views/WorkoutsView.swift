@@ -543,7 +543,7 @@ struct WorkoutsView: View {
             let digest = await Task.detached(priority: .userInitiated) { WorkoutMarkdown.digest(snapshot) }.value
             if Task.isCancelled { return }
             exportProgress = 1
-            chat = ChatPayload(title: "Workouts · \(snapshot.count)", markdown: md, digest: digest)
+            chat = ChatPayload(title: Self.contentsSummary(snapshot), markdown: md, digest: digest)
             Haptics.tap()
         }
     }
