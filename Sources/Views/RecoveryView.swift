@@ -221,12 +221,14 @@ struct RecoveryView: View {
                         let i = min(count - 1, max(0, raw))
                         if i != scrubIndex {
                             scrubIndex = i
-                            Haptics.selection()
+                            // Punchier tick on higher-stress hours.
+                            let v = Float(s.buckets[i].stress ?? 0)
+                            Haptics.scrub(intensity: 0.55 + 0.45 * v / 100)
                         }
                     }
                     .onEnded { _ in
                         scrubIndex = nil
-                        Haptics.tick()
+                        Haptics.scrub(intensity: 0.4)
                     }
             )
             .animation(.easeOut(duration: 0.12), value: scrubIndex)

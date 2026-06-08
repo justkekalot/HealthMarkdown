@@ -31,15 +31,18 @@ enum StressAnalyzer {
         let windowStart = calendar.date(byAdding: .hour, value: -23, to: thisHour) ?? thisHour
         async let hrByHourA   = hourly(store, .heartRate, options: .discreteAverage, start: windowStart, end: now, calendar: calendar) { $0.averageQuantity() }
         async let stepByHourA = hourly(store, .stepCount, options: .cumulativeSum, start: windowStart, end: now, calendar: calendar) { $0.sumQuantity() }
+        async let workoutsA   = workoutIntervals(store, start: windowStart, end: now)
         let hrByHour = await hrByHourA
         let stepByHour = await stepByHourA
+        let workouts = await workoutsA
 
         var buckets: [StressBucket] = []
         var sum = 0, count = 0
         var hour = windowStart
         while hour <= now {
             if let hr = hrByHour[hour] {
-                let s = stressValue(hr: hr, resting: restingHR, span: span, stepsPerHour: stepByHour[hour] ?? 0)
+                let active = activeFraction(windowStart: hour, duration: 3600, workouts: workouts)
+                let s = stressValue(hr: hr, resting: restingHR, span: span, stepsPerHour: stepByHour[hour] ?? 0, activeFraction: active)
                 buckets.append(.init(hour: hour, stress: s))
                 sum += s; count += 1
             } else {
@@ -49,16 +52,19 @@ enum StressAnalyzer {
             hour = next
         }
 
-        // Realtime "now" — latest HR in the last 15 min, damped by recent steps.
-        let recent = calendar.date(byAdding: .minute, value: -15, to: now) ?? now
-        let nowHR = await latestSample(store, .heartRate, since: recent, now: now)
+        // Realtime "now" — the most recent HR sample (always the last known
+        // value, even if the watch synced a while ago), damped by recent steps
+        // and by an in-progress workout.
+        let nowHR = await latestSample(store, .heartRate, since: windowStart, now: now)
         let stepWindow = calendar.date(byAdding: .minute, value: -20, to: now) ?? now
         let recentSteps = await sumValue(store, .stepCount, start: stepWindow, end: now) ?? 0
+        let nowActive = activeFraction(windowStart: calendar.date(byAdding: .minute, value: -15, to: now) ?? now,
+                                       duration: 900, workouts: workouts)
         // Scale ~20 min of steps to an hourly rate for the same damp curve.
-        let nowStress = nowHR.map { stressValue(hr: $0.value, resting: restingHR, span: span, stepsPerHour: recentSteps * 3) }
+        let liveStress = nowHR.map { stressValue(hr: $0.value, resting: restingHR, span: span, stepsPerHour: recentSteps * 3, activeFraction: nowActive) }
 
         return StressReport(buckets: buckets,
-                            now: nowStress,
+                            now: liveStress ?? buckets.last(where: { $0.stress != nil })?.stress,
                             nowAt: nowHR?.date,
                             restingHR: restingHR,
                             currentHR: nowHR?.value,
@@ -71,11 +77,27 @@ enum StressAnalyzer {
     /// Map an hour's average HR to a 0–100 stress value. Elevation above resting
     /// drives it; sustained stepping damps it (the elevation is activity, not
     /// stress) — up to −70% at ~3000+ steps/hour.
-    private static func stressValue(hr: Double, resting: Double, span: Double, stepsPerHour: Double) -> Int {
+    private static func stressValue(hr: Double, resting: Double, span: Double, stepsPerHour: Double, activeFraction: Double) -> Int {
         let elevation = max(0, hr - resting)
         let base = min(1, elevation / span)
-        let damp = 1 - 0.7 * min(1, max(0, (stepsPerHour - 300) / 3000))
-        return Int((base * damp * 100).rounded())
+        // Two damping sources, whichever is stronger: sustained stepping, and an
+        // overlapping workout (exertion is not stress). A fully-active hour drops
+        // to ~10% of its raw value, so workouts don't read as high stress.
+        let stepDamp = 1 - 0.7 * min(1, max(0, (stepsPerHour - 300) / 3000))
+        let workoutDamp = 1 - 0.9 * min(1, max(0, activeFraction))
+        return Int((base * min(stepDamp, workoutDamp) * 100).rounded())
+    }
+
+    /// Fraction of a [start, start+duration) window overlapped by any workout —
+    /// used to damp exercise out of the stress reading.
+    private static func activeFraction(windowStart: Date, duration: TimeInterval, workouts: [DateInterval]) -> Double {
+        guard duration > 0 else { return 0 }
+        let end = windowStart.addingTimeInterval(duration)
+        let overlap = workouts.reduce(0.0) { acc, w in
+            let lo = max(w.start, windowStart), hi = min(w.end, end)
+            return acc + max(0, hi.timeIntervalSince(lo))
+        }
+        return min(1, overlap / duration)
     }
 
     /// Age-predicted max HR (220 − age) from the Health date of birth; a neutral
@@ -102,6 +124,20 @@ enum StressAnalyzer {
                 } else {
                     cont.resume(returning: nil)
                 }
+            }
+            store.execute(q)
+        }
+    }
+
+    /// Workout time spans in a window (to exclude exertion from the stress map).
+    private static func workoutIntervals(_ store: HKHealthStore, start: Date, end: Date) async -> [DateInterval] {
+        let predicate = HKQuery.predicateForSamples(withStart: start, end: end, options: [])
+        return await withCheckedContinuation { cont in
+            let q = HKSampleQuery(sampleType: .workoutType(), predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, samples, _ in
+                let spans = (samples as? [HKWorkout])?.compactMap { w -> DateInterval? in
+                    w.endDate > w.startDate ? DateInterval(start: w.startDate, end: w.endDate) : nil
+                } ?? []
+                cont.resume(returning: spans)
             }
             store.execute(q)
         }
