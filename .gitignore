@@ -21,3 +21,4 @@ HealthMarkdown.xcodeproj/
 *.mode2v3
 *.perspectivev3
 build-device/
+build-sim/

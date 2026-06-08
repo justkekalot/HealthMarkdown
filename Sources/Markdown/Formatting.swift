@@ -79,4 +79,16 @@ enum Fmt {
     static func isoTimestamp(_ date: Date) -> String {
         isoFormatter.string(from: date)
     }
+
+    /// Localised clock time, e.g. "09:45" / "9:45 AM" — for intraday axes.
+    static func clock(_ date: Date) -> String {
+        clockFormatter.string(from: date)
+    }
+
+    private static let clockFormatter: DateFormatter = {
+        let df = DateFormatter()
+        df.dateStyle = .none
+        df.timeStyle = .short
+        return df
+    }()
 }

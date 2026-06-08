@@ -156,17 +156,10 @@ enum RecoveryAnalyzer {
 
         var metrics: [RecoveryMetric] = []
         var parts: [(score: Double, weight: Double)] = []
-        // Retained for the stress index (the autonomic flip side of recovery).
-        var hrvRecovery01: Double? = nil
-        var rhrRecovery01: Double? = nil
 
         // HRV (SDNN) — higher is better; the dominant recovery signal.
         if let v = hrvNight {
-            if let b = hrvBase {
-                let s = zScore01(v, b, higherBetter: true)
-                hrvRecovery01 = s
-                parts.append((s, 0.40))
-            }
+            if let b = hrvBase { parts.append((zScore01(v, b, higherBetter: true), 0.40)) }
             metrics.append(.init(key: "hrv", title: "HRV (SDNN)", symbol: "waveform.path.ecg",
                                  todayText: "\(Int(v.rounded())) ms", yesterdayText: nil,
                                  subtitle: hrvBase.map { "baseline \(Int($0.mean.rounded())) ms" } ?? "building baseline",
@@ -176,11 +169,7 @@ enum RecoveryAnalyzer {
 
         // Resting heart rate — lower is better.
         if let v = rhrLatest?.value {
-            if let b = rhrBase {
-                let s = zScore01(v, b, higherBetter: false)
-                rhrRecovery01 = s
-                parts.append((s, 0.25))
-            }
+            if let b = rhrBase { parts.append((zScore01(v, b, higherBetter: false), 0.25)) }
             metrics.append(.init(key: "rhr", title: "Resting heart rate", symbol: "heart.fill",
                                  todayText: "\(Int(v.rounded())) bpm", yesterdayText: nil,
                                  subtitle: rhrBase.map { "baseline \(Int($0.mean.rounded())) bpm" } ?? "building baseline",
@@ -216,13 +205,6 @@ enum RecoveryAnalyzer {
                                  subtitle: "latest · \(Fmt.shortDate(v.date))",
                                  deltaText: vo2Delta(v.value, vo2Base),
                                  trend: trendHigherBetter(v.value, vo2Base, tolerance: 0.5)))
-        }
-
-        // Stress — overnight autonomic load, derived from the same HRV and
-        // resting-HR z-scores (higher HRV / lower resting HR vs your baseline =
-        // calmer nervous system = lower stress). Shown first; not in the score.
-        if let stress = stressIndex(hrv: hrvRecovery01, rhr: rhrRecovery01) {
-            metrics.insert(stressMetric(stress), at: 0)
         }
 
         let totalW = parts.reduce(0) { $0 + $1.weight }
@@ -261,38 +243,6 @@ enum RecoveryAnalyzer {
         case 40..<60: return "Moderately recovered"
         default:      return "Take it easy today"
         }
-    }
-
-    // MARK: - Stress
-
-    /// Blend the HRV and resting-HR recovery scores (0–100, higher = better
-    /// recovered) into a 0–100 stress index where higher = more stressed.
-    /// Weighted 0.62/0.38 — HRV : resting HR, the same 40:25 ratio the score
-    /// uses. nil unless at least one autonomic signal has a personal baseline.
-    private static func stressIndex(hrv: Double?, rhr: Double?) -> Int? {
-        var num = 0.0, den = 0.0
-        if let h = hrv { num += (100 - h) * 0.62; den += 0.62 }
-        if let r = rhr { num += (100 - r) * 0.38; den += 0.38 }
-        guard den > 0 else { return nil }
-        return Int((num / den).rounded())
-    }
-
-    /// Render the stress index as a metric row: a word + the 0–100 number,
-    /// coloured green when low and red when elevated.
-    private static func stressMetric(_ index: Int) -> RecoveryMetric {
-        let label: String
-        let trend: TrendDirection
-        switch index {
-        case ..<30:   label = "Low";      trend = .better
-        case 30..<55: label = "Moderate"; trend = .flat
-        case 55..<75: label = "Elevated"; trend = .worse
-        default:      label = "High";     trend = .worse
-        }
-        return .init(key: "stress", title: "Stress",
-                     symbol: "gauge.with.dots.needle.bottom.50percent",
-                     todayText: label, yesterdayText: nil,
-                     subtitle: "overnight · HRV & resting HR",
-                     deltaText: "\(index)/100", trend: trend)
     }
 
     // MARK: - Trend / formatting helpers
