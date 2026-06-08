@@ -6,11 +6,8 @@ import HealthKit
 struct RecoveryView: View {
     @EnvironmentObject var health: HealthKitManager
     @State private var report: RecoveryReport?
-    @State private var narrative: String = ""
     @State private var loading = true
     @State private var showAsk = false
-
-    private let narrator: RecoveryNarrator = TemplateNarrator()
 
     var body: some View {
         NavigationStack {
@@ -23,9 +20,7 @@ struct RecoveryView: View {
                             loadingCard
                         } else if let report, report.hasData {
                             scoreCard(report)
-                            narrativeCard
                             metricsCard(report)
-                            askButton
                         } else {
                             emptyCard
                         }
@@ -50,22 +45,24 @@ struct RecoveryView: View {
         loading = true
         let r = await RecoveryAnalyzer.build(store: health.store)
         report = r
-        narrative = await narrator.narrate(r)
         loading = false
     }
 
     // MARK: - Pieces
 
     private var greeting: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(greetingText)
-                .font(.system(size: 32, weight: .bold, design: .serif))
-                .foregroundStyle(Theme.textPrimary)
-            Text(Fmt.shortDate(Date()) + " · recovered overnight")
-                .font(.subheadline)
-                .foregroundStyle(Theme.textSecondary)
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(greetingText)
+                    .font(.system(size: 32, weight: .bold, design: .serif))
+                    .foregroundStyle(Theme.textPrimary)
+                Text(Fmt.shortDate(Date()) + " · recovered overnight")
+                    .font(.subheadline)
+                    .foregroundStyle(Theme.textSecondary)
+            }
+            Spacer(minLength: 8)
+            if let report, report.hasData { askButton }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.top, 8)
     }
 
@@ -121,32 +118,21 @@ struct RecoveryView: View {
         }
     }
 
+    /// Compact pill in the header — opens the on-device chat about today.
     private var askButton: some View {
         Button { showAsk = true } label: {
-            HStack {
+            HStack(spacing: 6) {
                 Image(systemName: "bubble.left.and.text.bubble.right.fill")
-                Text("Ask about today")
+                Text("Ask")
             }
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
+            .background(Capsule().fill(Theme.accent))
+            .shadow(color: Theme.accent.opacity(0.28), radius: 8, x: 0, y: 4)
         }
-        .buttonStyle(PrimaryButtonStyle())
-    }
-
-    private var narrativeCard: some View {
-        GlassCard {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 8) {
-                    Image(systemName: "sparkles").foregroundStyle(Theme.accent)
-                    Text("On-device summary")
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Theme.textPrimary)
-                    Spacer()
-                }
-                Text(LocalizedStringKey(narrative))
-                    .font(.callout)
-                    .foregroundStyle(Theme.textPrimary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
+        .buttonStyle(.plain)
     }
 
     private func metricsCard(_ report: RecoveryReport) -> some View {
