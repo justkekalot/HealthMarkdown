@@ -19,4 +19,12 @@ enum Haptics {
         let g = UINotificationFeedbackGenerator()
         g.notificationOccurred(.success)
     }
+
+    /// A crisp selection tick — for scrubbing across discrete values (the same
+    /// feel as a picker wheel). Reuses one prepared generator for low latency.
+    private static let selectionGenerator = UISelectionFeedbackGenerator()
+    static func selection() {
+        selectionGenerator.selectionChanged()
+        selectionGenerator.prepare()   // keep the Taptic Engine warm for the next tick
+    }
 }

@@ -10,6 +10,8 @@ struct RecoveryView: View {
     @State private var stress: StressReport?
     @State private var loading = true
     @State private var showAsk = false
+    /// Index of the bar the finger is on while scrubbing the stress strip.
+    @State private var scrubIndex: Int? = nil
 
     /// Drives the realtime stress refresh while the screen is open.
     private let ticker = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
@@ -144,14 +146,7 @@ struct RecoveryView: View {
                             .foregroundStyle(Theme.textPrimary)
                     }
                     Spacer()
-                    if let n = s.now {
-                        let band = StressReport.band(n)
-                        HStack(spacing: 7) {
-                            Circle().fill(barFill(n)).frame(width: 8, height: 8)
-                            Text(band.label).font(.subheadline.weight(.medium)).foregroundStyle(Theme.textSecondary)
-                            Text("\(n)").font(.title3.weight(.bold)).foregroundStyle(Theme.textPrimary)
-                        }
-                    }
+                    stressReadout(s)
                 }
 
                 stressStrip(s)
@@ -173,17 +168,70 @@ struct RecoveryView: View {
         }
     }
 
-    /// The intraday strip: one bar per hour, height and warmth scale with stress.
-    private func stressStrip(_ s: StressReport) -> some View {
-        HStack(alignment: .bottom, spacing: 3) {
-            ForEach(s.buckets) { b in
-                RoundedRectangle(cornerRadius: 3, style: .continuous)
-                    .fill(b.stress == nil ? Theme.control : barFill(b.stress!))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: barHeight(b.stress))
+    /// The right-side value readout: the scrubbed hour while a finger is down,
+    /// otherwise the live "Now" reading.
+    @ViewBuilder
+    private func stressReadout(_ s: StressReport) -> some View {
+        if let i = scrubIndex, s.buckets.indices.contains(i) {
+            let b = s.buckets[i]
+            HStack(spacing: 7) {
+                Text(Fmt.clock(b.hour)).font(.subheadline.weight(.medium)).foregroundStyle(Theme.textSecondary)
+                if let v = b.stress {
+                    Circle().fill(barFill(v)).frame(width: 8, height: 8)
+                    Text("\(v)").font(.title3.weight(.bold)).foregroundStyle(Theme.textPrimary)
+                } else {
+                    Text("no data").font(.subheadline).foregroundStyle(Theme.textSecondary)
+                }
+            }
+        } else if let n = s.now {
+            let band = StressReport.band(n)
+            HStack(spacing: 7) {
+                Circle().fill(barFill(n)).frame(width: 8, height: 8)
+                Text(band.label).font(.subheadline.weight(.medium)).foregroundStyle(Theme.textSecondary)
+                Text("\(n)").font(.title3.weight(.bold)).foregroundStyle(Theme.textPrimary)
             }
         }
-        .frame(height: 56, alignment: .bottom)
+    }
+
+    /// The intraday strip: one bar per hour, height and warmth scale with stress.
+    /// Drag a finger across it to scrub — each hour ticks a selection haptic and
+    /// updates the readout above.
+    private func stressStrip(_ s: StressReport) -> some View {
+        GeometryReader { geo in
+            let count = max(1, s.buckets.count)
+            HStack(alignment: .bottom, spacing: 3) {
+                ForEach(Array(s.buckets.enumerated()), id: \.element.id) { idx, b in
+                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                        .fill(b.stress == nil ? Theme.control : barFill(b.stress!))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: barHeight(b.stress))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                .stroke(Theme.textPrimary.opacity(scrubIndex == idx ? 0.6 : 0), lineWidth: 1.5)
+                        )
+                        .opacity(scrubIndex == nil || scrubIndex == idx ? 1 : 0.4)
+                }
+            }
+            .frame(height: 56, alignment: .bottom)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        let raw = Int(value.location.x / max(1, geo.size.width) * CGFloat(count))
+                        let i = min(count - 1, max(0, raw))
+                        if i != scrubIndex {
+                            scrubIndex = i
+                            Haptics.selection()
+                        }
+                    }
+                    .onEnded { _ in
+                        scrubIndex = nil
+                        Haptics.tick()
+                    }
+            )
+            .animation(.easeOut(duration: 0.12), value: scrubIndex)
+        }
+        .frame(height: 56)
     }
 
     private func stressStat(value: String, label: String) -> some View {
