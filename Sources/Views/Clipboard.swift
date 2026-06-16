@@ -1,27 +1,24 @@
 import UIKit
+import UniformTypeIdentifiers
 
-/// Clipboard helpers for copying exports as **files** (not raw text), so pasting
-/// into Files / Mail / a chat app drops the `.md` file itself.
+/// Clipboard helpers for copying an export as a **file** (not raw text and not a
+/// file path), so pasting into Files / Mail / Messages / a chat app attaches the
+/// `.md` file itself.
 enum Clipboard {
-    /// Put an existing file on the pasteboard as a file, keeping its name. Falls
-    /// back to copying the text if a provider can't be made.
-    static func copyFile(at url: URL) {
-        if let provider = NSItemProvider(contentsOf: url) {
-            UIPasteboard.general.setItemProviders([provider], localOnly: false, expirationDate: nil)
-        } else if let text = try? String(contentsOf: url, encoding: .utf8) {
-            UIPasteboard.general.string = text
-        }
-    }
-
-    /// Write `markdown` to a temp `.md` file named `name` and copy it as a file.
+    /// Put the markdown on the pasteboard as a named file. We register a *data*
+    /// representation under the markdown UTI plus a suggested filename — and
+    /// deliberately do NOT expose a `file://` URL, because some apps paste that
+    /// URL as a path string instead of attaching the file.
     static func copyMarkdownFile(_ markdown: String, name: String) {
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(sanitize(name)).md")
-        do {
-            try markdown.data(using: .utf8)?.write(to: url, options: .atomic)
-            copyFile(at: url)
-        } catch {
-            UIPasteboard.general.string = markdown   // last-resort fallback
+        let data = Data(markdown.utf8)
+        let type = UTType(filenameExtension: "md") ?? .plainText
+        let provider = NSItemProvider()
+        provider.suggestedName = sanitize(name)
+        provider.registerDataRepresentation(forTypeIdentifier: type.identifier, visibility: .all) { completion in
+            completion(data, nil)
+            return nil
         }
+        UIPasteboard.general.setItemProviders([provider], localOnly: false, expirationDate: nil)
     }
 
     private static func sanitize(_ name: String) -> String {

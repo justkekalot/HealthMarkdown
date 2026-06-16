@@ -49,8 +49,9 @@ struct PreviewView: View {
     }
 
     private func copyToClipboard() {
-        // Copy the .md file itself, not its text — reuses the share temp file.
-        if let url = writeTempFile(markdown) { Clipboard.copyFile(at: url) }
+        // Copy the .md file itself (as a file attachment), not its text.
+        let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd"
+        Clipboard.copyMarkdownFile(markdown, name: "AppleHealth-\(df.string(from: report.generatedAt))")
         withAnimation { copied = true }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { withAnimation { copied = false } }
     }
