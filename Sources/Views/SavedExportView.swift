@@ -40,7 +40,9 @@ struct SavedExportView: View {
                         detail: workoutDetail,
                         onChat: { showChat = true },
                         onShare: { showShare = true },
-                        onCopy: { copyToClipboard() },
+                        onCopyMarkdown: { copy(.markdown) },
+                        onCopyPDF: { copy(.pdf) },
+                        onCopyCSV: { copy(.csv) },
                         copied: copied
                     )
                 }
@@ -80,10 +82,26 @@ struct SavedExportView: View {
         }
     }
 
-    private func copyToClipboard() {
-        // Copy the .md file itself, not its text.
+    private enum CopyFormat { case markdown, pdf, csv }
+
+    private func copy(_ format: CopyFormat) {
         let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd"
-        Clipboard.copyMarkdownFile(markdown, name: "AppleHealth-\(df.string(from: record.createdAt))")
+        let name = "AppleHealth-\(df.string(from: record.createdAt))"
+        switch format {
+        case .markdown:
+            Clipboard.copyMarkdownFile(markdown, name: name); markCopied()
+        case .csv:
+            Clipboard.copyCSV(ExportFormats.csv(fromMarkdown: markdown), name: name); markCopied()
+        case .pdf:
+            let md = markdown
+            Task.detached {
+                let data = ExportFormats.pdf(fromText: md)
+                await MainActor.run { Clipboard.copyPDF(data, name: name); markCopied() }
+            }
+        }
+    }
+
+    private func markCopied() {
         withAnimation { copied = true }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { withAnimation { copied = false } }
     }

@@ -26,7 +26,9 @@ struct PreviewView: View {
                                                        : ("\(report.sectionsWithData.count)", "sections"),
                     onChat: { showChat = true },
                     onShare: { share() },
-                    onCopy: { copyToClipboard() },
+                    onCopyMarkdown: { copy(.markdown) },
+                    onCopyPDF: { copy(.pdf) },
+                    onCopyCSV: { copy(.csv) },
                     copied: copied
                 )
             }
@@ -48,10 +50,26 @@ struct PreviewView: View {
         }
     }
 
-    private func copyToClipboard() {
-        // Copy the .md file itself (as a file attachment), not its text.
+    private enum CopyFormat { case markdown, pdf, csv }
+
+    private func copy(_ format: CopyFormat) {
         let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd"
-        Clipboard.copyMarkdownFile(markdown, name: "AppleHealth-\(df.string(from: report.generatedAt))")
+        let name = "AppleHealth-\(df.string(from: report.generatedAt))"
+        switch format {
+        case .markdown:
+            Clipboard.copyMarkdownFile(markdown, name: name); markCopied()
+        case .csv:
+            Clipboard.copyCSV(ExportFormats.csv(fromMarkdown: markdown), name: name); markCopied()
+        case .pdf:
+            // PDF pagination is heavy for big exports — render off the main thread.
+            Task.detached {
+                let data = ExportFormats.pdf(fromText: markdown)
+                await MainActor.run { Clipboard.copyPDF(data, name: name); markCopied() }
+            }
+        }
+    }
+
+    private func markCopied() {
         withAnimation { copied = true }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { withAnimation { copied = false } }
     }
@@ -101,7 +119,9 @@ struct ExportSummaryCard: View {
     var detail: String? = nil
     let onChat: () -> Void
     let onShare: () -> Void
-    let onCopy: () -> Void
+    let onCopyMarkdown: () -> Void
+    let onCopyPDF: () -> Void
+    let onCopyCSV: () -> Void
     let copied: Bool
 
     var body: some View {
@@ -150,8 +170,14 @@ struct ExportSummaryCard: View {
 
                     HStack(spacing: 10) {
                         secondary(icon: "square.and.arrow.up", label: "Share", action: onShare)
-                        secondary(icon: copied ? "checkmark" : "doc.on.doc",
-                                  label: copied ? "Copied" : "Copy", action: onCopy)
+                        Menu {
+                            Button { onCopyMarkdown() } label: { Label("Markdown", systemImage: "doc.text") }
+                            Button { onCopyPDF() }      label: { Label("PDF", systemImage: "doc.richtext") }
+                            Button { onCopyCSV() }      label: { Label("CSV", systemImage: "tablecells") }
+                        } label: {
+                            secondaryLabel(icon: copied ? "checkmark" : "doc.on.doc",
+                                           label: copied ? "Copied" : "Copy")
+                        }
                     }
                 }
             }
@@ -178,19 +204,22 @@ struct ExportSummaryCard: View {
     }
 
     private func secondary(icon: String, label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack {
-                Image(systemName: icon)
-                Text(label)
-            }
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(Theme.textPrimary)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
-            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.controlStrong))
-            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Theme.cardStroke, lineWidth: 1))
+        Button(action: action) { secondaryLabel(icon: icon, label: label) }
+            .buttonStyle(.plain)
+    }
+
+    /// The styled pill used by both the Share button and the Copy menu.
+    private func secondaryLabel(icon: String, label: String) -> some View {
+        HStack {
+            Image(systemName: icon)
+            Text(label)
         }
-        .buttonStyle(.plain)
+        .font(.subheadline.weight(.semibold))
+        .foregroundStyle(Theme.textPrimary)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 14)
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.controlStrong))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Theme.cardStroke, lineWidth: 1))
     }
 }
 
