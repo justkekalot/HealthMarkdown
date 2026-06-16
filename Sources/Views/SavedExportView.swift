@@ -81,7 +81,9 @@ struct SavedExportView: View {
     }
 
     private func copyToClipboard() {
-        UIPasteboard.general.string = markdown
+        // Copy the .md file itself, not its text.
+        let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd"
+        Clipboard.copyMarkdownFile(markdown, name: "AppleHealth-\(df.string(from: record.createdAt))")
         withAnimation { copied = true }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { withAnimation { copied = false } }
     }

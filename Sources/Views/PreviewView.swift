@@ -49,7 +49,8 @@ struct PreviewView: View {
     }
 
     private func copyToClipboard() {
-        UIPasteboard.general.string = markdown
+        // Copy the .md file itself, not its text — reuses the share temp file.
+        if let url = writeTempFile(markdown) { Clipboard.copyFile(at: url) }
         withAnimation { copied = true }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) { withAnimation { copied = false } }
     }
