@@ -31,6 +31,7 @@ struct RootView: View {
 /// automatically; we keep the background transparent so the ambient gradient
 /// shows through behind the glass.
 struct MainTabView: View {
+    @EnvironmentObject var health: HealthKitManager
     @State private var selection = 0
 
     init() {
@@ -68,5 +69,9 @@ struct MainTabView: View {
                 .tag(3)
         }
         .tint(Theme.accent)
+        // Re-request read access on launch so metrics added since the user first
+        // granted access get a permission prompt (otherwise they silently return
+        // no data and their sections vanish from the export).
+        .task { await health.ensureReadAccess() }
     }
 }

@@ -69,9 +69,22 @@ final class HealthKitManager: ObservableObject {
         }
     }
 
+    /// Re-request read access for a set of types WITHOUT touching `authState`, so
+    /// it can run on every launch / from the export screen without bouncing the
+    /// UI back to onboarding. iOS only shows the permission sheet for types the
+    /// user hasn't decided yet — i.e. metrics added to the catalog after the
+    /// first grant, which is exactly what otherwise silently goes missing.
+    func ensureReadAccess(for types: Set<HKObjectType> = HealthCatalog.allReadTypes()) async {
+        guard isAvailable, !types.isEmpty else { return }
+        try? await store.requestAuthorization(toShare: [], read: types)
+    }
+
     // MARK: - Report generation
 
-    func generateReport(for range: DateRangeOption, mode: ExportMode, customInterval: DateInterval? = nil) async {
+    /// `include` is a set of metric ids (QuantitySpec/CategorySpec `id`, plus the
+    /// pseudo-id "workouts"). When nil, everything is exported (default). When
+    /// set, only the chosen metrics are fetched — this powers the custom export.
+    func generateReport(for range: DateRangeOption, mode: ExportMode, customInterval: DateInterval? = nil, include: Set<String>? = nil) async {
         guard isAvailable else {
             phase = .failed("Health data isn't available on this device.")
             return
@@ -79,10 +92,20 @@ final class HealthKitManager: ObservableObject {
         let interval = range.interval(customInterval: customInterval)
         var report = HealthReport(generatedAt: Date(), range: range, mode: mode, interval: interval)
 
+        func included(_ id: String) -> Bool { include == nil || include!.contains(id) }
+        let sleepID = HKCategoryTypeIdentifier.sleepAnalysis.rawValue
+        let mindfulID = HKCategoryTypeIdentifier.mindfulSession.rawValue
+        let qSpecs = HealthCatalog.quantities.filter { included($0.id) }
+        let cSpecs = HealthCatalog.categories.filter { included($0.id) }
+        let wantSleep = included(sleepID)
+        let wantMindful = included(mindfulID)
+        let wantWorkouts = included(HealthCatalog.workoutsID)
+
         let predicate = HKQuery.predicateForSamples(withStart: interval.start, end: interval.end, options: .strictStartDate)
-        // Full and Raw modes run an extra raw pass over every quantity and category.
-        let extraRawWork = mode.includesRaw ? HealthCatalog.quantities.count + HealthCatalog.categories.count : 0
-        let totalSteps = HealthCatalog.quantities.count + 4 + extraRawWork
+        // Full and Raw modes run an extra raw pass over every selected quantity and category.
+        let extraRawWork = mode.includesRaw ? qSpecs.count + cSpecs.count : 0
+        let specials = (wantSleep ? 1 : 0) + (wantMindful ? 1 : 0) + (wantWorkouts ? 1 : 0)
+        let totalSteps = max(1, 1 + qSpecs.count + specials + extraRawWork)
         var step = 0
 
         func advance(_ label: String) {
@@ -97,7 +120,7 @@ final class HealthKitManager: ObservableObject {
         advance("Profile")
 
         // Quantities
-        for spec in HealthCatalog.quantities {
+        for spec in qSpecs {
             if Task.isCancelled { phase = .idle; return }
             advance(spec.title)
             if let summary = await fetchQuantitySummary(spec: spec, predicate: predicate, interval: interval) {
@@ -105,30 +128,31 @@ final class HealthKitManager: ObservableObject {
             }
         }
 
-        // Sleep
-        advance("Sleep")
-        report.sleep = await fetchSleep(predicate: predicate)
+        if wantSleep {
+            advance("Sleep")
+            report.sleep = await fetchSleep(predicate: predicate)
+        }
+        if wantMindful {
+            advance("Mindfulness")
+            report.mindful = await fetchMindful(predicate: predicate)
+        }
+        if wantWorkouts {
+            advance("Workouts")
+            report.workouts = await fetchWorkouts(predicate: predicate)
+        }
 
-        // Mindfulness
-        advance("Mindfulness")
-        report.mindful = await fetchMindful(predicate: predicate)
-
-        // Workouts
-        advance("Workouts")
-        report.workouts = await fetchWorkouts(predicate: predicate)
-
-        // Full & Raw exports: every raw sample for every metric that has data —
-        // quantities AND category types (sleep, mindfulness), so weight, heart
-        // rate, HRV and sleep all get a real time series, not just a summary.
+        // Full & Raw exports: every raw sample for every selected metric that has
+        // data — quantities AND category types (sleep, mindfulness), so weight,
+        // heart rate, HRV and sleep all get a real time series, not just a summary.
         if mode.includesRaw {
-            for spec in HealthCatalog.quantities {
+            for spec in qSpecs {
                 if Task.isCancelled { phase = .idle; return }
                 advance("\(spec.title) (raw)")
                 if let series = await fetchRawSeries(spec: spec, interval: interval), series.hasData {
                     report.rawSeries.append(series)
                 }
             }
-            for spec in HealthCatalog.categories {
+            for spec in cSpecs {
                 if Task.isCancelled { phase = .idle; return }
                 advance("\(spec.title) (raw)")
                 if let series = await fetchRawCategorySeries(spec: spec, interval: interval), series.hasData {

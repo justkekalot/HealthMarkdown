@@ -8,6 +8,7 @@ struct DashboardView: View {
     @State private var selectedMode: ExportMode = .quick
     @State private var showPreview = false
     @State private var showPaywall = false
+    @State private var showCustom = false
     @State private var showCustomRange = false
     // Custom range bounds (default: last 24h), used when selectedRange == .custom.
     @State private var customStart = Calendar.current.date(byAdding: .day, value: -1, to: Date()) ?? Date()
@@ -36,6 +37,7 @@ struct DashboardView: View {
 
                         stepHeader(1, "What to export")
                         modeSelector
+                        customExportLink
 
                         stepHeader(2, "Over which period")
                         rangeChips
@@ -70,6 +72,28 @@ struct DashboardView: View {
         .sheet(isPresented: $showCustomRange) {
             CustomRangeSheet(start: $customStart, end: $customEnd)
         }
+        .sheet(isPresented: $showCustom) {
+            CustomExportView(range: selectedRange, customInterval: customInterval)
+        }
+    }
+
+    /// Entry point to the per-metric custom export.
+    private var customExportLink: some View {
+        Button { showCustom = true } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "slider.horizontal.3")
+                Text("Custom — choose exactly which metrics")
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+                Image(systemName: "chevron.right").font(.caption.weight(.semibold))
+            }
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(Theme.accent)
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.iconChip))
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Step header

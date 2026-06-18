@@ -108,6 +108,20 @@ enum HealthCatalog {
         .init(identifier: .mindfulSession, title: "Mindful Sessions", section: .mindfulness),
     ]
 
+    /// Pseudo-id for workouts in the custom-export selection (workouts aren't a
+    /// quantity/category spec but are selectable just like one).
+    static let workoutsID = "workouts"
+
+    /// The read types for a set of selected metric ids — used to request access
+    /// for exactly what the user picked in the custom export.
+    static func readTypes(forIDs ids: Set<String>) -> Set<HKObjectType> {
+        var out = Set<HKObjectType>()
+        for q in quantities where ids.contains(q.id) { if let t = q.quantityType { out.insert(t) } }
+        for c in categories where ids.contains(c.id) { if let t = c.categoryType { out.insert(t) } }
+        if ids.contains(workoutsID) { out.insert(HKObjectType.workoutType()) }
+        return out
+    }
+
     /// Every read type, for the authorization request.
     static func allReadTypes() -> Set<HKObjectType> {
         var types = Set<HKObjectType>()
