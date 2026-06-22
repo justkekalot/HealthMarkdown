@@ -35,12 +35,11 @@ struct DashboardView: View {
                     VStack(alignment: .leading, spacing: 26) {
                         ScreenHeader(title: "Health", subtitle: "Apple Health → Markdown")
 
-                        stepHeader(1, "What to export")
-                        modeSelector
-                        customExportLink
-
-                        stepHeader(2, "Over which period")
+                        stepHeader(1, "Over which period")
                         rangeChips
+
+                        stepHeader(2, "What to export")
+                        modeSelector
 
                         stepHeader(3, "Generate")
                         actionArea
@@ -77,21 +76,43 @@ struct DashboardView: View {
         }
     }
 
-    /// Entry point to the per-metric custom export.
-    private var customExportLink: some View {
+    /// Custom export, styled identically to the mode cards but drilling into the
+    /// per-metric picker instead of being a radio choice.
+    private var customModeRow: some View {
         Button { showCustom = true } label: {
-            HStack(spacing: 10) {
-                Image(systemName: "slider.horizontal.3")
-                Text("Custom — choose exactly which metrics")
-                    .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .fill(Theme.control)
+                        .frame(width: 40, height: 40)
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(Theme.accent)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Custom")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(Theme.textPrimary)
+                    Text("Choose exactly which metrics to include")
+                        .font(.footnote)
+                        .foregroundStyle(Theme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 Spacer()
-                Image(systemName: "chevron.right").font(.caption.weight(.semibold))
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Theme.textSecondary.opacity(0.5))
             }
-            .font(.subheadline.weight(.medium))
-            .foregroundStyle(Theme.accent)
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.iconChip))
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(LinearGradient(colors: [Theme.card], startPoint: .top, endPoint: .bottom))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(Theme.cardStroke, lineWidth: 1)
+            )
         }
         .buttonStyle(.plain)
     }
@@ -119,6 +140,7 @@ struct DashboardView: View {
             ForEach(ExportMode.allCases) { mode in
                 modeRow(mode)
             }
+            customModeRow
         }
     }
 
